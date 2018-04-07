@@ -4,9 +4,9 @@ use warnings;
 use Moo;
 use Mojo::UserAgent;
 use Modern::Perl;
-use Encode;
+use Encode qw( encode decode from_to  );
 use MIME::Base64;
-use Types::Standard qw( :all Object);
+use Types::Standard qw(:all);
 use Log::Log4perl qw(:easy);
 use Data::Dumper;
 use IO::All;
@@ -70,6 +70,19 @@ has login_form => (
     },
 );
 
+has reply_form => (
+    is     =>   'rw',
+    isa    =>   HashRef[Any],
+    default=> sub {
+    {
+    seccodemodid => 'forum::viewthread',
+    posttime     => time(),
+    usesig       => undef,
+    subject      => undef,
+    }
+    }
+);
+
 has ua => (
     is    => 'lazy',
     isa   => Object,
@@ -89,7 +102,9 @@ sub _build_url {
         code_image=> 'http://www.cssanyu.org/bbs2/',
         login     => 'http://www.cssanyu.org/bbs2/member.php?mod=logging&action=login&loginsubmit=yes&handlekey=login&loginhash=LJEW9&inajax=1',
         api       => 'https://v2-api.jsdama.com/upload',
-        reply     => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1'
+        reply     => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
+        reply_from=> 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1'
+
     }
 }
 sub _build_ua {
@@ -120,14 +135,12 @@ sub BUILD {
     Log::Log4perl->easy_init($DEBUG);
 }
 
-sub login {
+sub _login {
     my $self    = shift;
     my $logger  = get_logger();
-    #my $code_result = $self->_get_code;
-    my $code_result;
-     $code_result->{code} =1111;
-     $code_result->{secode_hash} =1111;
-    my $form_hash   = $self->_get_form_hash;
+    $logger->debug('call login');
+    my $form_hash   = $self->_get_form_hash($self->url->{form_hash});
+    my $code_result = $self->_get_code;
     $self->login_form->{username} = $self->bbs_id;
     $self->login_form->{formhash} = $form_hash;
     $self->login_form->{password} = $self->bbs_pw;
@@ -138,11 +151,14 @@ sub login {
     my $login_retun  =  decode('gbk',$login_res);
     my $id = $self->bbs_id;
     $login_retun =~ /$id/ ? $logger->info( 'Login Success' ) :
-    $logger->error( 'Login Failed : '.$login_retun  );
+    $logger->error( 'Login Failed : '.$login_retun  ) and
     my $err_info     =  decode('utf-8', '验证码填写错误');
     if ($login_retun =~ /$err_info/) {
        $logger->error( 'secode error' );
-       $self->login;
+       #$self->login;
+       die 'secode error'
+    }else{
+       $logger->info('login success')
     }
     return $self;
 }
@@ -150,10 +166,19 @@ sub _get_form_hash {
     my $self  = shift;
     my $url   = shift;
     my $logger  = get_logger();
-    my $res_from  = $self->ua->get($self->url->{form_hash})->result->body;
+    unless ( $url ) {
+        $logger->error( 'not url for get form hash' );
+        die "not url for get formhash";
+    }
+    my $res_from  = $self->ua->get($url)->result->body;
     my (  $form_hash ) =
         $res_from =~ /<input type="hidden" name="formhash" value="(.*?)"/;
-    $logger->debug( ' Hash form => ', $form_hash );
+    if ( $form_hash ) {
+        $logger->debug( 'Hash form => ', $form_hash );
+    }else{
+        $logger->debug( 'Hash form is null: '.$url."reply\n".$res_from );
+        die 'Hash form is null';
+    }
     return $form_hash;
 }
 
@@ -195,18 +220,35 @@ sub _get_code {
 };
 
 sub reply_bbs {
-    my $self = shift;
-    my $turl = shift;
-    my $logger  = get_logger();
+    my $self        = shift;
+    my $turl        = shift;
+    my $message     = shift;
+    $self->_login;
+    my $logger      = get_logger();
+    $logger->debug('call reply_bbs');
     unless ($turl) {
         $logger->error( 'turl is null' );
         die "input turl";
     }
-    my $tid_url = sprintf $self->{url}->{reply}, $turl;
+    my $tid_url     = sprintf $self->{url}->{reply}, $turl;
+    my $hash_url    = sprintf $self->{url}->{reply_from},$turl;
     $logger->info ( 'turl : '.$tid_url );
-    my $err_info     =  decode('utf-8', '验证码填写错误');
-    if ($login_retun =~ /$err_info/) {
+    my $form_hash   = $self->_get_form_hash( $hash_url );
+    my $code_result = $self->_get_code;
+    my $data        = $self->reply_form;
+    from_to($message, "utf-8", "gbk");
+    $data->{seccodehash}  = $code_result->{secode_hash};
+    $data->{seccodeverify}= $code_result->{code};
+    $data->{formhash}     = $form_hash;
+    $data->{message}      = $message;
+    my $login_return= $self->ua->post($tid_url => form => $data)
+      ->result->body;
+    $login_return   =  decode('gbk',$login_return);
+    my $err_info    =  decode('utf-8', '验证码填写错误');
+    $logger->debug( $login_return);
+    if ($login_return=~ /$err_info/) {
        $logger->error( 'secode error' );
+       $logger->error('login_return');
        $self->reply_bbs;
     }
 }
