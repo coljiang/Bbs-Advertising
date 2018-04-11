@@ -10,6 +10,7 @@ use Types::Standard qw(:all);
 use Log::Log4perl qw(:easy);
 use Data::Dumper;
 use IO::All;
+use Mail::IMAPClient;
 # VERSION: 0.001
 # ABSTRACT: Send Ad to bbs
 
@@ -29,17 +30,21 @@ This is a main package for send ad to bbs
 
 =cut
 
-has [ qw( bbs_id bbs_pw ) ] => (
-   is    => 'rw',
-   isa   => Str
+has bbs_id   => (
+   is     => 'rw',
+   isa    => Str,
+   writer => 'set_bbs_id',
 );
-
+has bbs_pw   => (
+   is    => 'rw',
+   isa   => Str,
+   writer => 'set_bbs_pw',
+);
 has code_image_path => (
     is   => 'rw',
     isa  =>  Str,
     default => sub { './' }
 );
-
 has api_info => (
     is   => 'rw',
     isa  => HashRef[Str],
@@ -86,13 +91,46 @@ has reply_form => (
 has ua => (
     is    => 'lazy',
     isa   => Object,
-    builder => 1
+    builder => 1,
+    writer => 'set_ua',
 );
 
 has url => (
     is    => 'ro',
     isa   =>  HashRef[Str],
     builder => 1
+);
+=item map
+map ralation file
+=cut
+has map => (
+    is  => 'rw',
+    isa => Str,
+    default => sub { './source_map' }
+);
+
+=item report_dir
+report file path
+=cut
+has report_dir => (
+    is  =>  'rw',
+    isa =>  Str,
+    default => sub { './report.csv';  }
+);
+=item proxy_url
+proxy url
+=cut
+has proxy_url => (
+    is => 'rw',
+    isa => Str
+);
+=item bbs_image
+bbs image
+=cut
+has bbs_image=> (
+    is  => 'rw',
+    isa =>  Str,
+    default => sub { './image_data' }
 );
 sub _build_url {
     my $self = shift;
@@ -103,15 +141,54 @@ sub _build_url {
         login     => 'http://www.cssanyu.org/bbs2/member.php?mod=logging&action=login&loginsubmit=yes&handlekey=login&loginhash=LJEW9&inajax=1',
         api       => 'https://v2-api.jsdama.com/upload',
         reply     => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
-        reply_from=> 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1'
+        reply_from=> 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1',
+        secqaa_url=> 'http://www.cssanyu.org/bbs2/misc.php?mod=secqaa&action=update&idhash=qSC1Rl2Q',
+        creat_from=> 'http://www.cssanyu.org/bbs2/member.php?mod=register',
+        submit_req=> 'http://www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
+        subit_imag=> 'http://www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
+        post_imag => 'http://cssanyu.org/bbs2/uc_server/index.php',
 
     }
 }
+
 sub _build_ua {
     my $self = shift;
     my $ua = Mojo::UserAgent->new;
-    $ua->connect_timeout(18)->inactivity_timeout(18)->request_timeout(36);
-    $ua;
+
+    $ua->connect_timeout(60)->inactivity_timeout(60)->request_timeout(100);
+}
+sub _ua_add_proxy {
+    my $self  = shift;
+    my $ua    = $self->ua;
+    my $data  =  $ua->get($self->proxy_url)->result->json;
+    unless ( $data->{code}  ) {
+        my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
+          $data->{msg}->[0]->{port};
+        $ua->proxy->http($serve)->https($serve);
+        $ua;
+    }else{
+        my $logger  = get_logger();
+        $logger->error( 'proxy error' );
+        die "proxy error";
+    }
+
+}
+sub _proxy_ua {
+    my $self = shift;
+    my $ua = Mojo::UserAgent->new;
+
+    $ua->connect_timeout(60)->inactivity_timeout(60)->request_timeout(100);
+    my $data  =  $ua->get($self->proxy_url)->result->json;
+    unless ( $data->{code}  ) {
+        my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
+          $data->{msg}->[0]->{port};
+        $ua->proxy->http($serve)->https($serve);
+        $ua;
+    }else{
+        my $logger  = get_logger();
+        $logger->error( 'proxy error' );
+        die "proxy error";
+    }
 }
 has image_header => (
     is    =>  'ro',
@@ -155,8 +232,8 @@ sub _login {
     my $err_info     =  decode('utf-8', '验证码填写错误');
     if ($login_retun =~ /$err_info/) {
        $logger->error( 'secode error' );
-       #$self->login;
-       die 'secode error'
+       $self->_login;
+       # die 'secode error'
     }else{
        $logger->info('login success')
     }
@@ -165,6 +242,8 @@ sub _login {
 sub _get_form_hash {
     my $self  = shift;
     my $url   = shift;
+    my $qr    = shift;
+    $qr ||= qr/<input type="hidden" name="formhash" value="(.*?)"/;
     my $logger  = get_logger();
     unless ( $url ) {
         $logger->error( 'not url for get form hash' );
@@ -172,10 +251,11 @@ sub _get_form_hash {
     }
     my $res_from  = $self->ua->get($url)->result->body;
     my (  $form_hash ) =
-        $res_from =~ /<input type="hidden" name="formhash" value="(.*?)"/;
+        $res_from =~ /$qr/;
     if ( $form_hash ) {
         $logger->debug( 'Hash form => ', $form_hash );
     }else{
+        $res_from  =  decode('gbk', $res_from);
         $logger->debug( 'Hash form is null: '.$url."reply\n".$res_from );
         die 'Hash form is null';
     }
@@ -197,6 +277,7 @@ sub _get_code {
     chomp(my $time      = `date +%F_%R`);
     my $code_image_file  = $self->code_image_path.$self->bbs_id.$time.
       'secode.png';
+    print $code_image_file,"\n";
     $image_res > io($code_image_file);
     $self->api_info->{captchaData} = encode_base64($image_res);
     my $res_api = $self->ua->post('https://v2-api.jsdama.com/upload'
@@ -249,11 +330,312 @@ sub reply_bbs {
     if ($login_return=~ /$err_info/) {
        $logger->error( 'secode error' );
        $logger->error('login_return');
-       $self->reply_bbs;
+       $self->reply_bbs($turl, $message);
     }
 }
 
+sub create_user {
+    my $self   = shift;
+    #para : map report_dir(option)
+    $self->_ua_add_proxy;
+    my($map_relation);
+    my $logger  = get_logger();
+    $logger->debug('call create_user');
+    my @map_header = qw/
+       id mail bbs_id mail_pw  bbs_pw
+                   /;
+    my @report_header =  (@map_header, 'login', 'ban');
+    my $io             = io($self->map);
+    chomp(my $header   = $io->getline);
+    $logger->debug( 'header : '.$header );
+    my @headers        = split ',', $header;
+    while (  my $line = $io->getline )  {
+        chomp( $line );
+        $logger->debug('read line : '.$line);
+        my @val = ( split ',', $line );
+        my $relation = $self
+          ->_set_value( \@headers, \@val,\@report_header ,$logger);
+        my $mail_id = $relation->{mail};
+        unless ( $map_relation->{$mail_id} ) {
+            $map_relation->{$mail_id} = $relation;
+            $map_relation->{$mail_id}->{basic} =
+              (split '@', $mail_id)[0];
+        }else{
+            $logger->error( $mail_id." dup" );
+            die "mail id dup";
+        }
+    }
+    my @sort_list = sort { $map_relation->{$a}->{id}
+                             <=>
+                           $map_relation->{$b}->{id}
+                         }
+      keys %$map_relation;
+    for my $sort_id  ( @sort_list ) {
+        next if ($map_relation->{$sort_id}->{login});
+        $self->set_bbs_id($map_relation->{$sort_id}->{bbs_id});
+        $self->set_bbs_pw($map_relation->{$sort_id}->{bbs_pw});
+        #   $self->_login; ###jc_test
+        $logger->debug( 'create user : '.$sort_id );
+        $logger->debug( 'bbs_id : '.$map_relation->{$sort_id}->{bbs_id} );
+        $self->_request_mail( $map_relation->{$sort_id} );
+        $self->_create_bbs_user( $map_relation->{$sort_id} );
+        unless ($self->_update_bbs_image){
+            $logger->info( 'update map file' );
+            $map_relation->{$sort_id}->{login} = 1;
+            $self->_update_map(
+               \@sort_list, \@report_header, $map_relation, $logger
+                              );
+            $self->set_ua($self->_proxy_ua);
+        }
+    }
 
 
+
+
+}
+
+sub _set_value {
+    my $self   = shift;
+    my $keys   = shift;
+    my $values = shift;
+    my $need_key = shift;
+    my $logger = shift;
+    $logger->debug( 'keys : '.join  ',', @$keys );
+    $logger->debug( 'vals : '.join  ',', @$values );
+    my %relation;
+    unless( int(@$keys) == int(@$values)) {
+        my @form   = map { "$_ numbers is %s, $_ var : %s" }
+          ( qw/key value/ );
+        my $form_m = join "\n", @form;
+        my $keys_str = join  ',', @$keys;
+        my $vars_str = join ',', @$values;
+        my $message = sprintf $form_m, (@$keys + 1),
+            $keys_str, (@$values + 1), $vars_str;
+        die "set_value error";
+    }
+    for ( my $i=0; $i<@$keys; $i++ ) {
+             $relation{$keys->[$i]} = $values->[$i];
+    }
+    my %need_relation = map { $_ =>  $relation{$_} }  @$need_key;
+    #say Dumper \%relation;die;
+    return \%need_relation;
+}
+my $f;
+sub _create_bbs_user {
+   my $self      = shift;
+   my $user_info = shift;
+   my $logger    = get_logger();
+   my $login_url = $self->_get_login_url($user_info);
+   my $form_hash = $self->_get_form_hash($login_url);
+   my $double_regex= qr/<input type="hidden" name="hash" value="(.*?)"/;
+   my $double_hash= $self->_get_form_hash($login_url, $double_regex);
+   my $qaa_info  = $self->_get_secqaa;
+   $self->set_bbs_id($user_info->{bbs_id});
+   my $code_info = $self->_get_code;
+   $logger->info( 'submit data in login web'  );
+    my $header    = {'Content-Type' => 'multipart/form-data; boundary=----WebKitFormBoundary4ABamqy21AJoLmjp'};
+    my $test_data = {
+        'regsubmit'     => 'yes',  formhash=> $form_hash,
+        'referer'       => 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=248816&page=1',
+        'activationauth'=> undef,
+        'hash'          => $double_hash,
+        'nameuser_cssa' => $user_info->{bbs_id},
+        'wordpass_cssa' => $user_info->{bbs_pw},
+        'word2pass_cssa'=> $user_info->{bbs_pw},
+        'maile_cssa'    => $user_info->{mail},
+        'handlekey'     => 'sendregister',
+        'secqaahash'    => $qaa_info->{qaa_hash},
+        'secanswer'     => $qaa_info->{qaa_answer},
+        'seccodehash'   => $code_info->{secode_hash},
+        'seccodemodid'  => 'member::register',
+        'seccodeverify' => $code_info->{code}
+                    };
+
+    my $submit_tx = $self->ua->post(
+        $login_url => $header => form => $test_data
+                                  );
+    my $submit_res = $submit_tx->result->body;
+    $submit_res    =  decode('gbk',$submit_res);
+    my $err_info   =  decode('utf-8', '验证码填写错误');
+    my $suc_info   =  decode('utf-8','感谢您注册 纽约大学中国学生会BBS');
+    $logger->debug( $submit_res);
+    if ($submit_res=~ /$err_info/) {
+       $logger->error( 'secode error' );
+       $logger->error('login request error');
+       $self->_create_bbs_user($user_info);
+    }
+    if ( $submit_res=~ /$suc_info/ ) {
+        $logger->info( 'user - '.$user_info->{mail}.':create user success '  );
+        return 0;
+    }
+
+
+
+}
+
+sub _get_login_url {
+    my $self      = shift;
+    my $user_info = shift;
+    my $logger    = get_logger();
+    my $login_url =
+    my $domain    = (split '@', $user_info->{mail})[-1];
+    my $imap = Mail::IMAPClient->new(
+        Server    =>   'mail.'.$domain,
+        User      =>   $user_info->{mail},
+        Password  =>   $user_info->{mail_pw},
+        Ssl       =>   1,
+                                    );
+    my @data      = $imap->select('INBOX')
+      ->search('ALL');
+    $logger->info('waitting login mail 10 s');
+     sleep(5);
+    until ( @data) {
+        $logger->info('waitting login mail( not maill  ) 5s');
+        sleep(5);
+        @data = $imap->search('ALL');
+    };
+    my @sort_list = sort { $b <=> $a }  @data;
+    for my $quene ( @sort_list ) {
+        my $body  = decode('gbk',decode_base64($imap->body_string($quene)));
+        my ($login_url) = $body =~
+          /target=\"_blank\">(http:\/\/www.c.*)<\/a>/;
+        $login_url =~ s/amp;//g;
+        if ( $login_url ) {
+            $logger->debug($body);
+            $logger->debug( 'login url : '.$login_url );
+            return $login_url;
+        }
+    }
+}
+
+sub _request_mail {
+    my $self      = shift;
+    my $user_info = shift;
+    my $logger  = get_logger();
+    my $req_url   = $self->url->{create_form};
+    my $form_hash = $self->_get_form_hash($self->url->{form_hash});
+    my $qaa_info  = $self->_get_secqaa;
+    $self->set_bbs_id($user_info->{bbs_id});
+    my $code_info = $self->_get_code;
+    $logger->info( 'submit data for request mail' );
+    my $header    = {'Content-Type' => 'multipart/form-data; boundary=----WebKitFormBoundary4ABamqy21AJoLmjp'};
+    my $test_data = {
+        'regsubmit'     => 'yes',  formhash=> $form_hash,
+        'referer'       => 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=248816&page=1',
+        'activationauth'=> undef,
+        'hash'          => undef,
+        'maile_cssa'    => $user_info->{mail},
+        'handlekey'     => 'sendregister',
+        'secqaahash'    => $qaa_info->{qaa_hash},
+        'secanswer'     => $qaa_info->{qaa_answer},
+        'seccodehash'   => $code_info->{secode_hash},
+        'seccodemodid'  => 'member::register',
+        'seccodeverify' => $code_info->{code}
+                    };
+                    #say Dumper $test_data;
+    my $submit_tx = $self->ua->post(
+        $self->url->{submit_req} => $header => form => $test_data
+                                  );
+    my $submit_res = $submit_tx->result->body;
+    $submit_res    =  decode('gbk',$submit_res);
+    my $err_info    =  decode('utf-8', '验证码填写错误');
+    $logger->debug( $submit_res);
+    if ($submit_res=~ /$err_info/) {
+       $logger->error( 'secode error' );
+       $logger->error('submit request error');
+       $self->_request_mail($user_info);
+    }
+    if ( $submit_res=~ /succeedhandle_sendregister/ ) {
+        $logger->info( 'user - '.$user_info->{mail}.':request send success '  );
+        return 0;
+    }
+}
+
+sub _get_secqaa   {
+    my $self      = shift;
+    my %header    = (
+        Accept=> '*/*',
+        'Accept-Encoding'=> 'gzip, deflate',
+        'Accept-Language'=> 'zh-CN,zh;q=0.9',
+        Connection=> 'keep-alive',
+        Host=> 'www.cssanyu.org',
+        Referer=> 'http://www.cssanyu.org/bbs2/member.php?mod=register',
+        'User-Agent'=> 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.62 Safari/537.36w',
+        );
+    my $qaa_tx    = $self->ua->build_tx(GET => $self->url->{secqaa_url});
+    $qaa_tx->req->headers->from_hash({})
+      ->from_hash( \%header  );
+    my $qaa_reply=  $self->ua->start($qaa_tx)->result->body;
+    my ($cal )   =  $qaa_reply  =~ /sectplcode\[2\] \+ \'(.*)=.*/;
+    my $cal_result= eval( $cal );
+    my ($qaa_hash) =  $qaa_reply  =~ /secqaa_(.*)'/;
+=p
+    say $qaa_reply;
+    say $cal;
+    say $cal_result;
+    say $qaa_hash;
+=cut
+    return {
+        'qaa_hash' => $qaa_hash,
+         qaa_answer=> $cal_result
+           }
+}
+
+sub _update_map {
+    my $self      =  shift;
+    my $sort_list =  shift;
+    my $header    =  shift;
+    my $data      =  shift;
+    my $logger    =  shift;
+    $logger->info('bakup map file');
+    my $cmd       = "cp ".$self->map.' '.$self->map."_bak";
+    $logger->debug( 'sys cmd '.$cmd );
+    system ( $cmd );
+    my $output    =  join ',', @$header;
+    $output      .=  "\n";
+    for my $id ( @$sort_list ) {
+        $output  .=  join ',',
+        (map { $data->{$id}->{$_}  } @$header);
+        $output  .= "\n";
+    }
+    $output > io($self->map);
+    $logger->info( 'update map file is finished' );
+}
+
+sub _update_bbs_image {
+    my $self      = shift;
+    my $logger  = get_logger();
+    $logger->debug('call update_bbs_image');
+    my $d_io      = io($self->{bbs_image});
+    my @lines     = $d_io->getlines;
+    my %data      = map {
+                    chomp;
+                    split /:/, $_;
+                        } @lines;
+    my $hash      = $self->_get_form_hash( $self->url->{subit_imag} ,
+                       qr/http:\/\/cssanyu.org\/bbs2\/uc_server\/images\/camera.swf\?(.*?)'/ );
+    print $hash,"\n";
+    my %relation  =  split /&|=/, $hash;
+    $relation{m}  = 'user',
+    $relation{a}  = 'rectavatar',
+    my @need_keys = qw/ inajax appid input agent avatartype m a /;
+    my $para      = join '&', (map { $_.'='.$relation{$_} } @need_keys);
+    my $url       = $self->url->{post_imag}.'?'.$para;
+    my $header    = {
+        'Content-Type' => 'application/x-www-form-urlencoded',
+        'X-Requested-With' => 'ShockwaveFlash/29.0.0.113',
+        'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.62 Safari/537.36'
+                     };
+    my $tx        = $self->ua->post( $url =>$header=>form=>\%data );
+    my $req       = $tx->result->body;
+    if ( $req =~ /success="1"/ ) {
+        $logger->info( 'update image : Success' );
+        return 0;
+    }else{
+        $logger->error( 'update image : Fail'.$req );
+        die 'update image : Fail';
+    }
+
+}
 
 1;
