@@ -11,6 +11,7 @@ use Log::Log4perl qw(:easy);
 use Data::Dumper;
 use IO::All;
 use Mail::IMAPClient;
+use URI::Escape::XS;
 # VERSION: 0.001
 # ABSTRACT: Send Ad to bbs
 
@@ -235,7 +236,13 @@ sub _login {
        $self->_login;
        # die 'secode error'
     }else{
-       $logger->info('login success')
+       $logger->info('login success');
+       my $res = $self->ua->get($self->url->{subit_imag})->result;
+       if(!$res->is_success) {
+            say decode('gbk',$res->body);
+            die 'init error';
+       }
+
     }
     return $self;
 }
@@ -304,7 +311,8 @@ sub reply_bbs {
     my $self        = shift;
     my $turl        = shift;
     my $message     = shift;
-    $self->_login;
+    my $_self_call  = shift;
+    $self->_login unless $_self_call;
     my $logger      = get_logger();
     $logger->debug('call reply_bbs');
     unless ($turl) {
@@ -317,20 +325,30 @@ sub reply_bbs {
     my $form_hash   = $self->_get_form_hash( $hash_url );
     my $code_result = $self->_get_code;
     my $data        = $self->reply_form;
-    from_to($message, "utf-8", "gbk");
+
+    #from_to($message, "utf-8", "gbk");
+    $message =  encode("gbk",  $message);
+    $message =  encodeURIComponent($message);
+    $message =  decode('utf8',$message);
+
     $data->{seccodehash}  = $code_result->{secode_hash};
     $data->{seccodeverify}= $code_result->{code};
     $data->{formhash}     = $form_hash;
     $data->{message}      = $message;
-    my $login_return= $self->ua->post($tid_url => form => $data)
-      ->result->body;
+    #   $data->{subject}      = '++';
+    $data->{posttime}     = time;
+    my $login_return= $self->ua->post($tid_url =>
+                           { 'Accept-Language' => 'zh-CN,zh;q=0.9' },
+                           form => $data)->result->body;
     $login_return   =  decode('gbk',$login_return);
     my $err_info    =  decode('utf-8', '验证码填写错误');
     $logger->debug( $login_return);
     if ($login_return=~ /$err_info/) {
        $logger->error( 'secode error' );
        $logger->error('login_return');
-       $self->reply_bbs($turl, $message);
+       $self->reply_bbs($turl, $message,1);
+    }else{
+        $logger->error($login_return);
     }
 }
 
