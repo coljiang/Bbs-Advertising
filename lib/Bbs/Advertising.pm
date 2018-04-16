@@ -363,26 +363,27 @@ sub create_user {
        id mail bbs_id mail_pw  bbs_pw
                    /;
     my @report_header =  (@map_header, 'login', 'ban');
-    my $io             = io($self->map);
-    chomp(my $header   = $io->getline);
-    $logger->debug( 'header : '.$header );
-    my @headers        = split ',', $header;
-    while (  my $line = $io->getline )  {
-        chomp( $line );
-        $logger->debug('read line : '.$line);
-        my @val = ( split ',', $line );
-        my $relation = $self
-          ->_set_value( \@headers, \@val,\@report_header ,$logger);
-        my $mail_id = $relation->{mail};
-        unless ( $map_relation->{$mail_id} ) {
-            $map_relation->{$mail_id} = $relation;
-            $map_relation->{$mail_id}->{basic} =
-              (split '@', $mail_id)[0];
-        }else{
-            $logger->error( $mail_id." dup" );
-            die "mail id dup";
-        }
-    }
+#    my $io             = io($self->map);
+#    chomp(my $header   = $io->getline);
+#    $logger->debug( 'header : '.$header );
+#    my @headers        = split ',', $header;
+#    while (  my $line = $io->getline )  {
+#        chomp( $line );
+#        $logger->debug('read line : '.$line);
+#        my @val = ( split ',', $line );
+#        my $relation = $self
+#          ->_set_value( \@headers, \@val,\@report_header ,$logger);
+#        my $mail_id = $relation->{mail};
+#        unless ( $map_relation->{$mail_id} ) {
+#            $map_relation->{$mail_id} = $relation;
+#            $map_relation->{$mail_id}->{basic} =
+#              (split '@', $mail_id)[0];
+#        }else{
+#            $logger->error( $mail_id." dup" );
+#            die "mail id dup";
+#        }
+#    }
+    $map_relation = $self->_read_csv($self->map,\@report_header, $logger);
     my @sort_list = sort { $map_relation->{$a}->{id}
                              <=>
                            $map_relation->{$b}->{id}
@@ -438,7 +439,36 @@ sub _set_value {
     #say Dumper \%relation;die;
     return \%need_relation;
 }
-my $f;
+
+sub _read_csv{
+    my $self = shift;
+    my $file = shift;
+    my $need_h = shift;
+    my $logger = shift;
+    my($map_relation);
+    my $io             = io($file);
+    chomp(my $header   = $io->getline);
+    $logger->debug( 'header : '.$header );
+    my @headers        = split ',', $header;
+    while (  my $line = $io->getline )  {
+        chomp( $line );
+        $logger->debug('read line : '.$line);
+        my @val = ( split ',', $line );
+        my $relation = $self
+          ->_set_value( \@headers, \@val,$need_h ,$logger);
+        my $mail_id = $relation->{mail};
+        unless ( $map_relation->{$mail_id} ) {
+            $map_relation->{$mail_id} = $relation;
+            $map_relation->{$mail_id}->{basic} =
+              (split '@', $mail_id)[0];
+        }else{
+            $logger->error( $mail_id." dup" );
+            die "mail id dup";
+        }
+    }
+    return $map_relation;
+
+}
 sub _create_bbs_user {
    my $self      = shift;
    my $user_info = shift;
