@@ -325,7 +325,7 @@ sub reply_bbs {
     }
     my $tid_url     = sprintf $self->{url}->{reply}, $turl;
     my $hash_url    = sprintf $self->{url}->{reply_from},$turl;
-    $self->log->info ( 'turl : '.$tid_url );
+    $self->log->info ( 'turl : '.$hash_url );
     my $form_hash   = $self->_get_form_hash( $hash_url );
     my $code_result = $self->_get_code;
     my $data        = $self->reply_form;
@@ -406,7 +406,7 @@ sub create_user {
             $self->log->info( 'update map file' );
             $map_relation->{$sort_id}->{login} = 1;
             $self->_update_map(
-               \@sort_list, \@report_header, $map_relation
+               \@sort_list, \@report_header, $map_relation, $self->map
                               );
             $self->set_ua($self->_proxy_ua);
         }
@@ -423,8 +423,8 @@ sub _set_value {
     my $values = shift;
     my $need_key = shift;
     my $logger = shift;
-    $self->log->debug( 'keys : '.join  ',', @$keys );
-    $self->log->debug( 'vals : '.join  ',', @$values );
+    #$self->log->debug( 'keys : '.join  ',', @$keys );
+    #$self->log->debug( 'vals : '.join  ',', @$values );
     my %relation;
     unless( int(@$keys) == int(@$values)) {
         my @form   = map { "$_ numbers is %s, $_ var : %s" }
@@ -638,9 +638,10 @@ sub _update_map {
     my $sort_list =  shift;
     my $header    =  shift;
     my $data      =  shift;
+    my $path      =  shift;
     ##my $logger    =  shift;
-    $self->log->info('bakup map file');
-    my $cmd       = "cp ".$self->map.' '.$self->map."_bak";
+    $self->log->info('bakup ', $path,' file');
+    my $cmd       = "cp ".$path.' '.$path."_bak";
     $self->log->debug( 'sys cmd '.$cmd );
     system ( $cmd );
     my $output    =  join ',', @$header;
@@ -650,8 +651,8 @@ sub _update_map {
         (map { $data->{$id}->{$_}  } @$header);
         $output  .= "\n";
     }
-    $output > io($self->map);
-    $self->log->info( 'update map file is finished' );
+    $output > io($path);
+    $self->log->info( 'update ',$path,' is finished' );
 }
 
 sub _update_bbs_image {
