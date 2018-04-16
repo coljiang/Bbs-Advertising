@@ -7,7 +7,8 @@ use Modern::Perl;
 use Encode qw( encode decode from_to  );
 use MIME::Base64;
 use Types::Standard qw(:all);
-use Log::Log4perl qw(:easy);
+use Log::Log4perl;
+use Log::Any::Adapter;
 use Data::Dumper;
 use IO::All;
 use Mail::IMAPClient;
@@ -168,8 +169,8 @@ sub _ua_add_proxy {
         $ua->proxy->http($serve)->https($serve);
         $ua;
     }else{
-        my $logger  = get_logger();
-        $logger->error( 'proxy error' );
+#        my $logger  = get_logger();
+        $self->log->error( 'proxy error' );
         die "proxy error";
     }
 
@@ -186,8 +187,8 @@ sub _proxy_ua {
         $ua->proxy->http($serve)->https($serve);
         $ua;
     }else{
-        my $logger  = get_logger();
-        $logger->error( 'proxy error' );
+#        my $logger  = get_logger();
+        $self->log->error( 'proxy error' );
         die "proxy error";
     }
 }
@@ -210,13 +211,16 @@ has image_header => (
 
 sub BUILD {
     my $self   = shift;
-    Log::Log4perl->easy_init($DEBUG);
+    my $args   = shift;
+    die " You need config log" unless $args->{log_conf};
+    Log::Log4perl->init($args->{log_conf});
+    Log::Any::Adapter->set('Log4perl');
 }
 
 sub _login {
     my $self    = shift;
-    my $logger  = get_logger();
-    $logger->debug('call login');
+#    my $logger  = get_logger();
+    $self->log->debug('call login');
     my $form_hash   = $self->_get_form_hash($self->url->{form_hash});
     my $code_result = $self->_get_code;
     $self->login_form->{username} = $self->bbs_id;
@@ -228,15 +232,15 @@ sub _login {
       form => $self->login_form)->result->body;
     my $login_retun  =  decode('gbk',$login_res);
     my $id = $self->bbs_id;
-    $login_retun =~ /$id/ ? $logger->info( 'Login Success' ) :
-    $logger->error( 'Login Failed : '.$login_retun  ) and
+    $login_retun =~ /$id/ ? $self->log->info( 'Login Success' ) :
+    $self->log->error( 'Login Failed : '.$login_retun  ) and
     my $err_info     =  decode('utf-8', '验证码填写错误');
     if ($login_retun =~ /$err_info/) {
-       $logger->error( 'secode error' );
+       $self->log->error( 'secode error' );
        $self->_login;
        # die 'secode error'
     }else{
-       $logger->info('login success');
+       $self->log->info('login success');
        my $res = $self->ua->get($self->url->{subit_imag})->result;
        if(!$res->is_success) {
             say decode('gbk',$res->body);
@@ -251,19 +255,19 @@ sub _get_form_hash {
     my $url   = shift;
     my $qr    = shift;
     $qr ||= qr/<input type="hidden" name="formhash" value="(.*?)"/;
-    my $logger  = get_logger();
+#    my $logger  = get_logger();
     unless ( $url ) {
-        $logger->error( 'not url for get form hash' );
+        $self->log->error( 'not url for get form hash' );
         die "not url for get formhash";
     }
     my $res_from  = $self->ua->get($url)->result->body;
     my (  $form_hash ) =
         $res_from =~ /$qr/;
     if ( $form_hash ) {
-        $logger->debug( 'Hash form => ', $form_hash );
+        $self->log->debug( 'Hash form => ', $form_hash );
     }else{
         $res_from  =  decode('gbk', $res_from);
-        $logger->debug( 'Hash form is null: '.$url."reply\n".$res_from );
+        $self->log->debug( 'Hash form is null: '.$url."reply\n".$res_from );
         die 'Hash form is null';
     }
     return $form_hash;
@@ -271,7 +275,7 @@ sub _get_form_hash {
 
 sub _get_code {
     my $self  = shift;
-    my $logger  = get_logger();
+#    my $logger  = get_logger();
     my $res_code_info         =
         $self->ua->get($self->url->{code_info})->result->body;
     my ( $pic_url  )   = $res_code_info =~ /src="(misc.php\?[\w&=]+)/;
@@ -284,23 +288,23 @@ sub _get_code {
     chomp(my $time      = `date +%F_%R`);
     my $code_image_file  = $self->code_image_path.$self->bbs_id.$time.
       'secode.png';
-    print $code_image_file,"\n";
+      #print $code_image_file,"\n";
     $image_res > io($code_image_file);
     $self->api_info->{captchaData} = encode_base64($image_res);
     my $res_api = $self->ua->post('https://v2-api.jsdama.com/upload'
       => json => $self->api_info)->result;
     until ( $res_api->code ) {
-        $logger->info( 'wait code 3s ');
+        $self->log->info( 'wait code 3s ');
         sleep(3);
         $res_api = $self->ua->post('https://v2-api.jsdama.com/upload'
           => json => $self->api_info)->result;
     };
     if ( $res_api->json('/code') ) {
-        $logger->error( encode( 'unicode', $res_api->json('/message' ) ));
+        $self->log->error( encode( 'unicode', $res_api->json('/message' ) ));
         die " api error"
     }
     my $code =  $res_api->json('/data/recognition');
-    $logger->info('secode : '.$code);
+    $self->log->info('secode : '.$code);
     return {
         'secode_hash' => $secode_hash,
         'code'        => $code
@@ -313,15 +317,15 @@ sub reply_bbs {
     my $message     = shift;
     my $_self_call  = shift;
     $self->_login unless $_self_call;
-    my $logger      = get_logger();
-    $logger->debug('call reply_bbs');
+#    my $logger      = get_logger();
+    $self->log->debug('call reply_bbs');
     unless ($turl) {
-        $logger->error( 'turl is null' );
+        $self->log->error( 'turl is null' );
         die "input turl";
     }
     my $tid_url     = sprintf $self->{url}->{reply}, $turl;
     my $hash_url    = sprintf $self->{url}->{reply_from},$turl;
-    $logger->info ( 'turl : '.$tid_url );
+    $self->log->info ( 'turl : '.$tid_url );
     my $form_hash   = $self->_get_form_hash( $hash_url );
     my $code_result = $self->_get_code;
     my $data        = $self->reply_form;
@@ -342,13 +346,13 @@ sub reply_bbs {
                            form => $data)->result->body;
     $login_return   =  decode('gbk',$login_return);
     my $err_info    =  decode('utf-8', '验证码填写错误');
-    $logger->debug( $login_return);
+    $self->log->debug( $login_return);
     if ($login_return=~ /$err_info/) {
-       $logger->error( 'secode error' );
-       $logger->error('login_return');
+       $self->log->error( 'secode error' );
+       $self->log->error('login_return');
        $self->reply_bbs($turl, $message,1);
     }else{
-        $logger->error($login_return);
+        $self->log->error($login_return);
     }
 }
 
@@ -357,19 +361,19 @@ sub create_user {
     #para : map report_dir(option)
     $self->_ua_add_proxy;
     my($map_relation);
-    my $logger  = get_logger();
-    $logger->debug('call create_user');
+#    my $logger  = get_logger();
+    $self->log->debug('call create_user');
     my @map_header = qw/
        id mail bbs_id mail_pw  bbs_pw
                    /;
     my @report_header =  (@map_header, 'login', 'ban');
 #    my $io             = io($self->map);
 #    chomp(my $header   = $io->getline);
-#    $logger->debug( 'header : '.$header );
+#    $self->log->debug( 'header : '.$header );
 #    my @headers        = split ',', $header;
 #    while (  my $line = $io->getline )  {
 #        chomp( $line );
-#        $logger->debug('read line : '.$line);
+#        $self->log->debug('read line : '.$line);
 #        my @val = ( split ',', $line );
 #        my $relation = $self
 #          ->_set_value( \@headers, \@val,\@report_header ,$logger);
@@ -379,11 +383,11 @@ sub create_user {
 #            $map_relation->{$mail_id}->{basic} =
 #              (split '@', $mail_id)[0];
 #        }else{
-#            $logger->error( $mail_id." dup" );
+#            $self->log->error( $mail_id." dup" );
 #            die "mail id dup";
 #        }
 #    }
-    $map_relation = $self->_read_csv($self->map,\@report_header, $logger);
+    $map_relation = $self->_read_csv($self->map,\@report_header);
     my @sort_list = sort { $map_relation->{$a}->{id}
                              <=>
                            $map_relation->{$b}->{id}
@@ -394,15 +398,15 @@ sub create_user {
         $self->set_bbs_id($map_relation->{$sort_id}->{bbs_id});
         $self->set_bbs_pw($map_relation->{$sort_id}->{bbs_pw});
         #   $self->_login; ###jc_test
-        $logger->debug( 'create user : '.$sort_id );
-        $logger->debug( 'bbs_id : '.$map_relation->{$sort_id}->{bbs_id} );
+        $self->log->debug( 'create user : '.$sort_id );
+        $self->log->debug( 'bbs_id : '.$map_relation->{$sort_id}->{bbs_id} );
         $self->_request_mail( $map_relation->{$sort_id} );
         $self->_create_bbs_user( $map_relation->{$sort_id} );
         unless ($self->_update_bbs_image){
-            $logger->info( 'update map file' );
+            $self->log->info( 'update map file' );
             $map_relation->{$sort_id}->{login} = 1;
             $self->_update_map(
-               \@sort_list, \@report_header, $map_relation, $logger
+               \@sort_list, \@report_header, $map_relation
                               );
             $self->set_ua($self->_proxy_ua);
         }
@@ -419,8 +423,8 @@ sub _set_value {
     my $values = shift;
     my $need_key = shift;
     my $logger = shift;
-    $logger->debug( 'keys : '.join  ',', @$keys );
-    $logger->debug( 'vals : '.join  ',', @$values );
+    $self->log->debug( 'keys : '.join  ',', @$keys );
+    $self->log->debug( 'vals : '.join  ',', @$values );
     my %relation;
     unless( int(@$keys) == int(@$values)) {
         my @form   = map { "$_ numbers is %s, $_ var : %s" }
@@ -444,25 +448,25 @@ sub _read_csv{
     my $self = shift;
     my $file = shift;
     my $need_h = shift;
-    my $logger = shift;
+    #my $logger = shift;
     my($map_relation);
     my $io             = io($file);
     chomp(my $header   = $io->getline);
-    $logger->debug( 'header : '.$header );
+    $self->log->debug( 'header : '.$header );
     my @headers        = split ',', $header;
     while (  my $line = $io->getline )  {
         chomp( $line );
-        $logger->debug('read line : '.$line);
+        $self->log->debug('read line : '.$line);
         my @val = ( split ',', $line );
         my $relation = $self
-          ->_set_value( \@headers, \@val,$need_h ,$logger);
+          ->_set_value( \@headers, \@val,$need_h );
         my $mail_id = $relation->{mail};
         unless ( $map_relation->{$mail_id} ) {
             $map_relation->{$mail_id} = $relation;
             $map_relation->{$mail_id}->{basic} =
               (split '@', $mail_id)[0];
         }else{
-            $logger->error( $mail_id." dup" );
+            $self->log->error( $mail_id." dup" );
             die "mail id dup";
         }
     }
@@ -472,7 +476,7 @@ sub _read_csv{
 sub _create_bbs_user {
    my $self      = shift;
    my $user_info = shift;
-   my $logger    = get_logger();
+#   my $logger    = get_logger();
    my $login_url = $self->_get_login_url($user_info);
    my $form_hash = $self->_get_form_hash($login_url);
    my $double_regex= qr/<input type="hidden" name="hash" value="(.*?)"/;
@@ -480,7 +484,7 @@ sub _create_bbs_user {
    my $qaa_info  = $self->_get_secqaa;
    $self->set_bbs_id($user_info->{bbs_id});
    my $code_info = $self->_get_code;
-   $logger->info( 'submit data in login web'  );
+   $self->log->info( 'submit data in login web'  );
     my $header    = {'Content-Type' => 'multipart/form-data; boundary=----WebKitFormBoundary4ABamqy21AJoLmjp'};
     my $test_data = {
         'regsubmit'     => 'yes',  formhash=> $form_hash,
@@ -506,14 +510,14 @@ sub _create_bbs_user {
     $submit_res    =  decode('gbk',$submit_res);
     my $err_info   =  decode('utf-8', '验证码填写错误');
     my $suc_info   =  decode('utf-8','感谢您注册 纽约大学中国学生会BBS');
-    $logger->debug( $submit_res);
+    $self->log->debug( $submit_res);
     if ($submit_res=~ /$err_info/) {
-       $logger->error( 'secode error' );
-       $logger->error('login request error');
+       $self->log->error( 'secode error' );
+       $self->log->error('login request error');
        $self->_create_bbs_user($user_info);
     }
     if ( $submit_res=~ /$suc_info/ ) {
-        $logger->info( 'user - '.$user_info->{mail}.':create user success '  );
+        $self->log->info( 'user - '.$user_info->{mail}.':create user success '  );
         return 0;
     }
 
@@ -524,7 +528,6 @@ sub _create_bbs_user {
 sub _get_login_url {
     my $self      = shift;
     my $user_info = shift;
-    my $logger    = get_logger();
     my $login_url =
     my $domain    = (split '@', $user_info->{mail})[-1];
     my $imap = Mail::IMAPClient->new(
@@ -535,10 +538,10 @@ sub _get_login_url {
                                     );
     my @data      = $imap->select('INBOX')
       ->search('ALL');
-    $logger->info('waitting login mail 10 s');
+    $self->log->info('waitting login mail 10 s');
      sleep(5);
     until ( @data) {
-        $logger->info('waitting login mail( not maill  ) 5s');
+        $self->log->info('waitting login mail( not maill  ) 5s');
         sleep(5);
         @data = $imap->search('ALL');
     };
@@ -549,8 +552,8 @@ sub _get_login_url {
           /target=\"_blank\">(http:\/\/www.c.*)<\/a>/;
         $login_url =~ s/amp;//g;
         if ( $login_url ) {
-            $logger->debug($body);
-            $logger->debug( 'login url : '.$login_url );
+            $self->log->debug($body);
+            $self->log->debug( 'login url : '.$login_url );
             return $login_url;
         }
     }
@@ -559,13 +562,14 @@ sub _get_login_url {
 sub _request_mail {
     my $self      = shift;
     my $user_info = shift;
-    my $logger  = get_logger();
+#    my $logger  = get_logger();
+#    my $logger    = get_logger();
     my $req_url   = $self->url->{create_form};
     my $form_hash = $self->_get_form_hash($self->url->{form_hash});
     my $qaa_info  = $self->_get_secqaa;
     $self->set_bbs_id($user_info->{bbs_id});
     my $code_info = $self->_get_code;
-    $logger->info( 'submit data for request mail' );
+    $self->log->info( 'submit data for request mail' );
     my $header    = {'Content-Type' => 'multipart/form-data; boundary=----WebKitFormBoundary4ABamqy21AJoLmjp'};
     my $test_data = {
         'regsubmit'     => 'yes',  formhash=> $form_hash,
@@ -587,14 +591,14 @@ sub _request_mail {
     my $submit_res = $submit_tx->result->body;
     $submit_res    =  decode('gbk',$submit_res);
     my $err_info    =  decode('utf-8', '验证码填写错误');
-    $logger->debug( $submit_res);
+    $self->log->debug( $submit_res);
     if ($submit_res=~ /$err_info/) {
-       $logger->error( 'secode error' );
-       $logger->error('submit request error');
+       $self->log->error( 'secode error' );
+       $self->log->error('submit request error');
        $self->_request_mail($user_info);
     }
     if ( $submit_res=~ /succeedhandle_sendregister/ ) {
-        $logger->info( 'user - '.$user_info->{mail}.':request send success '  );
+        $self->log->info( 'user - '.$user_info->{mail}.':request send success '  );
         return 0;
     }
 }
@@ -634,10 +638,10 @@ sub _update_map {
     my $sort_list =  shift;
     my $header    =  shift;
     my $data      =  shift;
-    my $logger    =  shift;
-    $logger->info('bakup map file');
+    ##my $logger    =  shift;
+    $self->log->info('bakup map file');
     my $cmd       = "cp ".$self->map.' '.$self->map."_bak";
-    $logger->debug( 'sys cmd '.$cmd );
+    $self->log->debug( 'sys cmd '.$cmd );
     system ( $cmd );
     my $output    =  join ',', @$header;
     $output      .=  "\n";
@@ -647,13 +651,13 @@ sub _update_map {
         $output  .= "\n";
     }
     $output > io($self->map);
-    $logger->info( 'update map file is finished' );
+    $self->log->info( 'update map file is finished' );
 }
 
 sub _update_bbs_image {
     my $self      = shift;
-    my $logger  = get_logger();
-    $logger->debug('call update_bbs_image');
+#    my $logger  = get_logger();
+    $self->log->debug('call update_bbs_image');
     my $d_io      = io($self->{bbs_image});
     my @lines     = $d_io->getlines;
     my %data      = map {
@@ -677,10 +681,10 @@ sub _update_bbs_image {
     my $tx        = $self->ua->post( $url =>$header=>form=>\%data );
     my $req       = $tx->result->body;
     if ( $req =~ /success="1"/ ) {
-        $logger->info( 'update image : Success' );
+        $self->log->info( 'update image : Success' );
         return 0;
     }else{
-        $logger->error( 'update image : Fail'.$req );
+        $self->log->error( 'update image : Fail'.$req );
         die 'update image : Fail';
     }
 
