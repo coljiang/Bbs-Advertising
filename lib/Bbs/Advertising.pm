@@ -16,7 +16,6 @@ use URI::Escape::XS;
 # VERSION: 0.001
 # ABSTRACT: Send Ad to bbs
 
-with 'MooX::Log::Any';
 
 =head1 DESCRIPTION
 
@@ -134,6 +133,7 @@ has bbs_image=> (
     isa =>  Str,
     default => sub { './image_data' }
 );
+with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
 sub _build_url {
     my $self = shift;
     {
@@ -142,6 +142,7 @@ sub _build_url {
         code_image=> 'http://www.cssanyu.org/bbs2/',
         login     => 'http://www.cssanyu.org/bbs2/member.php?mod=logging&action=login&loginsubmit=yes&handlekey=login&loginhash=LJEW9&inajax=1',
         api       => 'https://v2-api.jsdama.com/upload',
+        error_api => 'https://v2-api.jsdama.com/report-error',
         reply     => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
         reply_from=> 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1',
         secqaa_url=> 'http://www.cssanyu.org/bbs2/misc.php?mod=secqaa&action=update&idhash=qSC1Rl2Q',
@@ -237,6 +238,9 @@ sub _login {
     my $err_info     =  decode('utf-8', '验证码填写错误');
     if ($login_retun =~ /$err_info/) {
        $self->log->error( 'secode error' );
+       my $error_info= $self->api_info;
+       $error_info->{captchaId} =$code_result->{captcha_id};
+       $self->error_secode($error_info);
        $self->_login;
        # die 'secode error'
     }else{
@@ -304,11 +308,13 @@ sub _get_code {
         die " api error"
     }
     my $code =  $res_api->json('/data/recognition');
+    my $capture = $res_api->json('/data/captchaId');
     $self->log->info('secode : '.$code);
     return {
         'secode_hash' => $secode_hash,
-        'code'        => $code
-           }
+        'code'        => $code,
+        'captcha_id'  => $capture
+           };
 };
 
 sub reply_bbs {
@@ -348,8 +354,10 @@ sub reply_bbs {
     my $err_info    =  decode('utf-8', '验证码填写错误');
     $self->log->debug( $login_return);
     if ($login_return=~ /$err_info/) {
-       $self->log->error( 'secode error' );
-       $self->log->error('login_return');
+       $self->log->error( 'secode error in reply' );
+       my $error_info= $self->api_info;
+       $error_info->{captchaId} =$code_result->{captcha_id};
+       $self->error_secode($error_info);
        $self->reply_bbs($turl, $message,1);
     }else{
         $self->log->error($login_return);
@@ -512,8 +520,10 @@ sub _create_bbs_user {
     my $suc_info   =  decode('utf-8','感谢您注册 纽约大学中国学生会BBS');
     $self->log->debug( $submit_res);
     if ($submit_res=~ /$err_info/) {
-       $self->log->error( 'secode error' );
-       $self->log->error('login request error');
+       $self->log->error( 'secode error in create user' );
+       my $error_info= $self->api_info;
+       $error_info->{captchaId} =$code_info->{captcha_id};
+       $self->error_secode($error_info);
        $self->_create_bbs_user($user_info);
     }
     if ( $submit_res=~ /$suc_info/ ) {
@@ -593,8 +603,11 @@ sub _request_mail {
     my $err_info    =  decode('utf-8', '验证码填写错误');
     $self->log->debug( $submit_res);
     if ($submit_res=~ /$err_info/) {
-       $self->log->error( 'secode error' );
+       $self->log->error( 'secode error in request mail' );
        $self->log->error('submit request error');
+       my $error_info= $self->api_info;
+       $error_info->{captchaId} =$code_info->{captcha_id};
+       $self->error_secode($error_info);
        $self->_request_mail($user_info);
     }
     if ( $submit_res=~ /succeedhandle_sendregister/ ) {

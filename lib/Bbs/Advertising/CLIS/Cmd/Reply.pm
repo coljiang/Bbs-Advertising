@@ -111,6 +111,7 @@ sub execute {
           bbs_id    =>   $source->{$doc}->{bbs_id},
           bbs_pw    =>   $source->{$doc}->{bbs_pw},
           api_info  =>   $self->api_info,
+          code_image_path =>  $self->code_image_path,
                         );
         my $bbs_ad = Bbs::Advertising->new(%init_args);
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
