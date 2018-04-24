@@ -240,6 +240,7 @@ sub _login {
        $self->log->error( 'secode error' );
        my $error_info= $self->api_info;
        $error_info->{captchaId} =$code_result->{captcha_id};
+       $error_info->{code}      =$code_result->{code};
        $self->error_secode($error_info);
        $self->_login;
        # die 'secode error'
@@ -357,6 +358,7 @@ sub reply_bbs {
        $self->log->error( 'secode error in reply' );
        my $error_info= $self->api_info;
        $error_info->{captchaId} =$code_result->{captcha_id};
+       $error_info->{code} =$code_result->{code};
        $self->error_secode($error_info);
        $self->reply_bbs($turl, $message,1);
     }else{
@@ -523,6 +525,7 @@ sub _create_bbs_user {
        $self->log->error( 'secode error in create user' );
        my $error_info= $self->api_info;
        $error_info->{captchaId} =$code_info->{captcha_id};
+       $error_info->{code} =$code_info->{code};
        $self->error_secode($error_info);
        $self->_create_bbs_user($user_info);
     }
@@ -607,6 +610,7 @@ sub _request_mail {
        $self->log->error('submit request error');
        my $error_info= $self->api_info;
        $error_info->{captchaId} =$code_info->{captcha_id};
+       $error_info->{code} =$code_info->{code};
        $self->error_secode($error_info);
        $self->_request_mail($user_info);
     }

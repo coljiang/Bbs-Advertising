@@ -16,7 +16,7 @@ sub error_secode {
                     );
     my $res_api    =  $self->ua->post(
              $self->url->{error_api} =>  json => $error_info
-                                     );
+                                     )->result;
     if ( !$res_api->json('/code')  ) {
         $self->log->error('Report secode recognition error is succeed');
     }else{
