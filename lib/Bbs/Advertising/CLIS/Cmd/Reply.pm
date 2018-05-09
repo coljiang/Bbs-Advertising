@@ -85,8 +85,13 @@ sub execute {
   #  print Dumper $mission;
     my @key_uints= qw/ year month day hour minute second /;
     my @all_m    = keys %$mission;
+    my @sort_all_m = sort {
+                    my($num_a ) = $mission->{$a}->{mail} =~/(\d+)\@/;
+                    my($num_b ) = $mission->{$b}->{mail} =~/(\d+)\@/;
+                    $num_a <=> $num_b;
+                          } @all_m;
     #all missions
-    for my $doc ( @all_m ) {
+    for my $doc ( @sort_all_m ) {
         my @var_units= split /-|T|:/,  $mission->{$doc}->{last};
         my $init_form= {map { $key_uints[$_] => $var_units[$_] }
                          (0..$#key_uints)};
@@ -117,7 +122,7 @@ sub execute {
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
         $self->log->info( 'reply bbs success tid : ' , $mission->{$doc}->{tid} );
         $mission->{$doc}->{last} = DateTime->now(time_zone => "Asia/Shanghai");
-        $ad_obj->_update_map(\@all_m, \@m_header, $mission, $self->target);
+        $ad_obj->_update_map(\@sort_all_m, \@m_header, $mission, $self->target);
         $self->log->info('update ',$self->target);
     }
 
