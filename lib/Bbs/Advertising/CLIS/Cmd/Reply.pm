@@ -141,6 +141,10 @@ sub execute {
           api_info  =>   $self->api_info,
           code_image_path =>  $self->code_image_path,
                         );
+        if ( $self->has_proxy_ip && $self->proxy_ip ) {
+            $init_args{proxy_ip}  = $self->proxy_ip;
+            $init_args{proxy_url} = $self->proxy_url;
+        }
         my $bbs_ad = Bbs::Advertising->new(%init_args);
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
         $self->log->info( 'reply bbs success tid : ' , $mission->{$doc}->{tid} );
