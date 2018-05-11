@@ -3,7 +3,7 @@ use Modern::Perl;
 use Moo;
 use MooX::Cmd;
 use MooX::Options  with_config_from_file => 1, prefer_commandline => 1;
-use Types::Standard qw/ Str HashRef/;
+use Types::Standard qw/ Str HashRef Num/;
 use Log::Any::Adapter;
 use Log::Log4perl;
 use Bbs::Advertising;
@@ -56,6 +56,28 @@ option 'api_info' => (
 );
 
 
+
+option 'proxy_ip' => (
+    is    => 'ro',
+    doc   => 'Whether to use an agent : 1 yes ; 0 no',
+    predicate => 1
+);
+
+option 'proxy_url'=> (
+    is    => 'ro',
+    isa   => Str,
+    format => 's',
+    doc   => 'Get proxy server ip'
+);
+
+option 'time_interval' => (
+    is    => 'ro',
+    isa   => Num,
+    format => 'i',
+    doc   => 'reply bbs time interval',
+    default => sub { 3 }
+);
+
 sub BUILD {
     my $self   = shift;
     my $args   = shift;
@@ -101,10 +123,11 @@ sub execute {
                                               )
                        ->in_units('minutes');
         $self->log->debug('dur time in min ', Dumper $dur );
-        if ( $dur < 185 ) {
-            my $form = "tid:%s not enought 3 hours";
+        if ( $dur < 62* ($self->time_interval )) {
+            my $form = "tid:%s not enought %s hours";
             $self->log->info( sprintf ( $form,
-                                        $mission->{$doc}->{tid}
+                                        $mission->{$doc}->{tid},
+                                        $self->time_interval
                                       )
                             );
             next;
