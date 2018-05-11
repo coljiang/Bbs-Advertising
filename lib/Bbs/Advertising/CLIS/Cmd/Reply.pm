@@ -56,19 +56,6 @@ option 'api_info' => (
 );
 
 
-
-option 'proxy_ip' => (
-    is    => 'ro',
-    doc   => 'Whether to use an agent : 1 yes ; 0 no',
-    predicate => 1
-);
-
-option 'proxy_url'=> (
-    is    => 'ro',
-    isa   => Str,
-    format => 's',
-    doc   => 'Get proxy server ip'
-);
 sub BUILD {
     my $self   = shift;
     my $args   = shift;
@@ -114,8 +101,8 @@ sub execute {
                                               )
                        ->in_units('minutes');
         $self->log->debug('dur time in min ', Dumper $dur );
-        if ( $dur < 65 ) {
-            my $form = "tid:%s not enought 1 hours";
+        if ( $dur < 185 ) {
+            my $form = "tid:%s not enought 3 hours";
             $self->log->info( sprintf ( $form,
                                         $mission->{$doc}->{tid}
                                       )
@@ -131,10 +118,6 @@ sub execute {
           api_info  =>   $self->api_info,
           code_image_path =>  $self->code_image_path,
                         );
-        if ($self->has_proxy_ip && $self->proxy_ip){
-            $init_args{proxy_ip} = $self->proxy_ip;
-            $init_args{proxy_url}= $self->proxy_url;
-        }
         my $bbs_ad = Bbs::Advertising->new(%init_args);
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
         $self->log->info( 'reply bbs success tid : ' , $mission->{$doc}->{tid} );
