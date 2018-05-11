@@ -133,7 +133,29 @@ has bbs_image=> (
     isa =>  Str,
     default => sub { './image_data' }
 );
+
+=item proxy_ip
+
+ Whether to use an agent : 1 yes ; 0 no
+
+=cut
+
+has  proxy_ip  => (
+    is   => 'ro',
+    isa  =>  Bool,
+    predicate => 1,
+);
+
+
+
 with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
+before 'reply_bbs' => sub {
+                my $self = shift;
+                if ($self->has_proxy_ip && $self->proxy_ip) {
+                    $self->log->info( 'Set proxy' );
+                    $self->_ua_add_proxy
+                }
+                          };
 sub _build_url {
     my $self = shift;
     {
@@ -160,6 +182,7 @@ sub _build_ua {
 
     $ua->connect_timeout(60)->inactivity_timeout(60)->request_timeout(100);
 }
+
 sub _ua_add_proxy {
     my $self  = shift;
     my $ua    = $self->ua;
@@ -217,6 +240,7 @@ sub BUILD {
     Log::Log4perl->init($args->{log_conf});
     Log::Any::Adapter->set('Log4perl');
 }
+
 
 sub _login {
     my $self    = shift;
