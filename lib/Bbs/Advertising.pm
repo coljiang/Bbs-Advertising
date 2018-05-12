@@ -140,9 +140,9 @@ has bbs_image=> (
 
 =cut
 
-has  proxy_ip  => (
+has  proxy_server  => (
     is   => 'ro',
-    isa  =>  Bool,
+    isa  =>  Str,
     predicate => 1,
 );
 
@@ -151,9 +151,12 @@ has  proxy_ip  => (
 with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
 before 'reply_bbs' => sub {
                 my $self = shift;
-                if ($self->has_proxy_ip && $self->proxy_ip) {
-                    $self->log->info( 'Set proxy' );
-                    $self->_ua_add_proxy
+                if ($self->has_proxy_server) {
+                    $self->log->info( 'Set proxy ', $self->proxy_server );
+                    #                   $self->_ua_add_proxy
+                    my $ua    = $self->ua;
+                    my $serve = $self->proxy_server;
+                    $ua->proxy->http($serve)->https($serve);
                 }
                           };
 sub _build_url {

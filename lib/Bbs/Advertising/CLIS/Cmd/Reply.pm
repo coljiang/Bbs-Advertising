@@ -142,8 +142,17 @@ sub execute {
           code_image_path =>  $self->code_image_path,
                         );
         if ( $self->has_proxy_ip && $self->proxy_ip ) {
-            $init_args{proxy_ip}  = $self->proxy_ip;
-            $init_args{proxy_url} = $self->proxy_url;
+            my $data  =  $ad_obj->ua->get($self->proxy_url)->result->json;
+            unless ( $data->{code}  ) {
+                my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
+                $data->{msg}->[0]->{port};
+                $init_args{proxy_server}  = $serve;
+            }else{
+#        my $logger  = get_logger();
+                $self->log->error( 'proxy error' );
+                die "proxy error";
+            }
+
         }
         my $bbs_ad = Bbs::Advertising->new(%init_args);
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
