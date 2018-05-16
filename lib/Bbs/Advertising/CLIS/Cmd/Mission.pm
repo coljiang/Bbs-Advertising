@@ -18,7 +18,6 @@ use IO::All;
 
 # VERSION
 # ABSTRACT: This is subroutine of CLI apps that create mission list file
-with 'MooX::Log::Any';
 
 =head1 Attributes
 
@@ -102,6 +101,38 @@ option 'log_conf' => (
     doc       => 'Config Set'
 );
 
+has 'type_id'  => (
+    is        => 'ro',
+    isa       =>  HashRef[Str],
+    default   =>  sub {
+        {
+    "Manhattan"=>1,
+    "Newport"=>"2",
+    "Brooklyn"=>"4",
+    "Queens"=>"12",
+    "Roosevelt Island"=>"6",
+    "Flushing"=>"1",
+    "Long Island City"=>"44",
+    "New Jersey"=>"13",
+    "Journal Square"=>"5",
+    "Manhattan Downtown"=>"8",
+    "Manhattan Midtown"=>"10",
+    "Manhattan Uptown"=>"17",
+    "BayPkwy & BayRidge"=>"43",
+    "Jackson Heights"=>"19",
+    "Forest Hills"=>"18",
+    "Rego Park"=>"16",
+    "Elmhurst"=>"3",
+    "求长租"=>"45",
+    "求短租"=>"42",
+    "找室友"=>"23",
+    "其他"=>"15",
+        }
+                      }
+);
+
+with 'MooX::Log::Any','Bbs::Advertising::Role::IO';
+
 =head1 Method
 
 =cut
@@ -158,10 +189,19 @@ sub execute {
             my @mail_content = split /$sp_str/, $mail_body->body;
              for (@mail_content) {
                 s/^\n+$|^\s+|\s+$//mg;
-                say $1, '$1 Match' if $1;
+                #say $1, '$1 Match' if $1;
              };
              ($content{type}, $content{title}, $content{body}) = @mail_content[1..3];
              $content{body} = (split /--/, $content{body})[0];
+            my $type_int    = $self->type_id->{$content{type}};
+            if ( $type_int ) {
+                $content{type} = $type_int;
+            }else{
+                $self->log->warn(
+                "$header{Subject} has error type var : >$content{type}<"
+                                );
+                 $content{type} = $content{type}."Error";
+            }
             #           say Dumper $con->parts;
             for (my $i=0;$i<@parts; $i++){
                  if ( $parts[$i]->content_type =~ /jpeg/ ) {
@@ -181,6 +221,8 @@ sub execute {
         }
 	}
     ##output
+    $self->save_mail_content( \@need_mail );
+=p
     for ( my$i=0; $i<@need_mail; $i++ ) {
         my $mail_c = $need_mail[$i];
         $output .= $i.'#' x 20 ."\n";
@@ -198,6 +240,7 @@ sub execute {
     }
     $output > io($self->mission);
     $self->log->info("Save Prase result to ", $self->mission);
+=cut
 }
 
 

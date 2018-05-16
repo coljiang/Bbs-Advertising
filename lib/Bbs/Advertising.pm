@@ -134,6 +134,7 @@ has bbs_image=> (
     default => sub { './image_data' }
 );
 
+
 =item proxy_ip
 
  Whether to use an agent : 1 yes ; 0 no
@@ -146,7 +147,17 @@ has  proxy_server  => (
     predicate => 1,
 );
 
+=item mission
 
+ mail prase result
+
+=cut
+
+has  mission  => (
+    is   => 'ro',
+    isa  =>  Str,
+    predicate => 1,
+);
 
 with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
 before 'reply_bbs' => sub {
@@ -175,6 +186,7 @@ sub _build_url {
         submit_req=> 'http://www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
         subit_imag=> 'http://www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
         post_imag => 'http://cssanyu.org/bbs2/uc_server/index.php',
+        release_form => 'http://cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
 
     }
 }
@@ -345,6 +357,8 @@ sub _get_code {
            };
 };
 
+
+
 sub reply_bbs {
     my $self        = shift;
     my $turl        = shift;
@@ -450,6 +464,16 @@ sub create_user {
     }
 
 
+
+
+}
+
+sub postings {
+    my $self  = shift;
+    my ( @need_post );
+    $self->log->info("call postings");
+    $self->log->debug( "read mission file");
+    io->($self->mission)
 
 
 }
