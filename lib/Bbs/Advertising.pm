@@ -135,14 +135,15 @@ has bbs_image=> (
 );
 
 
-=item proxy_ip
+=item proxy_server
 
- Whether to use an agent : 1 yes ; 0 no
+ A file save proxy ip
+ e.g. 182.34.20.1
 
 =cut
 
 has  proxy_server  => (
-    is   => 'ro',
+    is   => 'rw',
     isa  =>  Str,
     predicate => 1,
 );
@@ -160,6 +161,8 @@ has  mission  => (
 );
 
 with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
+
+=p
 before 'reply_bbs' => sub {
                 my $self = shift;
                 if ($self->has_proxy_server) {
@@ -170,6 +173,8 @@ before 'reply_bbs' => sub {
                     $ua->proxy->http($serve)->https($serve);
                 }
                           };
+=cut
+
 sub _build_url {
     my $self = shift;
     {
@@ -195,41 +200,30 @@ sub _build_ua {
     my $self = shift;
     my $ua = Mojo::UserAgent->new;
 
+
     $ua->connect_timeout(60)->inactivity_timeout(60)->request_timeout(100);
 }
 
 sub _ua_add_proxy {
     my $self  = shift;
     my $ua    = $self->ua;
-    my $data  =  $ua->get($self->proxy_url)->result->json;
-    unless ( $data->{code}  ) {
-        my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
-          $data->{msg}->[0]->{port};
-        $ua->proxy->http($serve)->https($serve);
-        $ua;
+    my $ip    = io($self->proxy_server)->chomp->getline;
+    if ( $ip =~ /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/) {
+        $ua->on(start => sub {
+            my ($ua, $tx) = @_;
+            $tx->req->headers->header(
+            'X_FORWARDED_FOR'=> $ip
+        )});
     }else{
-#        my $logger  = get_logger();
-        $self->log->error( 'proxy error' );
-        die "proxy error";
+        die "Parameter - proxy_server : Error";
     }
-
+    $self->log->info("Set header : X_FORWARDED_FOR - $ip ");
 }
-sub _proxy_ua {
+sub _new_ua {
     my $self = shift;
     my $ua = Mojo::UserAgent->new;
 
     $ua->connect_timeout(60)->inactivity_timeout(60)->request_timeout(100);
-    my $data  =  $ua->get($self->proxy_url)->result->json;
-    unless ( $data->{code}  ) {
-        my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
-          $data->{msg}->[0]->{port};
-        $ua->proxy->http($serve)->https($serve);
-        $ua;
-    }else{
-#        my $logger  = get_logger();
-        $self->log->error( 'proxy error' );
-        die "proxy error";
-    }
 }
 has image_header => (
     is    =>  'ro',
@@ -269,7 +263,7 @@ sub _login {
     $self->login_form->{seccodehash} = $code_result->{secode_hash};
     $self->login_form->{seccodeverify} = $code_result->{code};
     my $login_res = $self->ua->post($self->url->{login} =>
-      form => $self->login_form)->result->body;
+      form => $self->login_form  )->result->body;
     my $login_retun  =  decode('gbk',$login_res);
     my $id = $self->bbs_id;
     $login_retun =~ /$id/ ? $self->log->info( 'Login Success' ) :
@@ -364,6 +358,7 @@ sub reply_bbs {
     my $turl        = shift;
     my $message     = shift;
     my $_self_call  = shift;
+    $self->_ua_add_proxy if ($self->proxy_server && !$_self_call);
     $self->_login unless $_self_call;
 #    my $logger      = get_logger();
     $self->log->debug('call reply_bbs');
@@ -377,7 +372,6 @@ sub reply_bbs {
     my $form_hash   = $self->_get_form_hash( $hash_url );
     my $code_result = $self->_get_code;
     my $data        = $self->reply_form;
-
     #from_to($message, "utf-8", "gbk");
     $message =  encode("gbk",  $message);
     $message =  encodeURIComponent($message);
@@ -390,7 +384,8 @@ sub reply_bbs {
     #   $data->{subject}      = '++';
     $data->{posttime}     = time;
     my $login_return= $self->ua->post($tid_url =>
-                           { 'Accept-Language' => 'zh-CN,zh;q=0.9' },
+                           { 'Accept-Language' => 'zh-CN,zh;q=0.9'
+                           },
                            form => $data)->result->body;
     $login_return   =  decode('gbk',$login_return);
     my $err_info    =  decode('utf-8', '验证码填写错误');
@@ -459,7 +454,8 @@ sub create_user {
             $self->_update_map(
                \@sort_list, \@report_header, $map_relation, $self->map
                               );
-            $self->set_ua($self->_proxy_ua);
+            $self->set_ua($self->_new_ua);
+            $self->_update_proxy_file->_ua_add_proxy;
         }
     }
 
@@ -757,6 +753,33 @@ sub _update_bbs_image {
         die 'update image : Fail';
     }
 
+}
+
+sub _update_proxy_ip {
+  my $self = shift;
+  my $ip = shift;
+  my $loc= shift;
+  $self->log->info("Input ip address : ", $ip);
+  my @parts = split /\./, $ip;
+  $loc ||= $#parts;
+  if ( ++$parts[$loc] > 254 ) {
+    $parts[$loc] = 1;
+    $loc--;
+    die "need update ip" if ( $loc == 0 );
+    $self->_update_proxy_ip( join( '.', @parts ), $loc );
+  }else{
+    $self->log->info("Update up result is ", join( '.', @parts  ));
+    return join( '.', @parts );
+  }
+}
+
+sub _update_proxy_file {
+    my $self = shift;
+    my $ip    = io($self->proxy_server)->chomp->getline;
+    my $update= $self->_update_proxy_ip( $ip );
+    $update > io($self->proxy_server);
+    $self->log->info( "update proxy file" );
+    $self;
 }
 
 1;

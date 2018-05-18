@@ -47,7 +47,6 @@ option 'log_conf'=> (
     requeire => 1,
     doc   =>  'log config file'
 );
-
 option 'api_info' => (
     is    =>   'rw',
     isa   =>   HashRef[Str],
@@ -55,19 +54,20 @@ option 'api_info' => (
     doc   =>  'proxy client config'
 );
 
-
+=p
 
 option 'proxy_ip' => (
     is    => 'ro',
     doc   => 'Whether to use an agent : 1 yes ; 0 no',
     predicate => 1
 );
-
-option 'proxy_url'=> (
+=cut
+option 'proxy_server'=> (
     is    => 'ro',
     isa   => Str,
     format => 's',
-    doc   => 'Get proxy server ip'
+    predicate => 1,
+    doc   => 'A file save proxy serve ip'
 );
 
 option 'time_interval' => (
@@ -141,18 +141,9 @@ sub execute {
           api_info  =>   $self->api_info,
           code_image_path =>  $self->code_image_path,
                         );
-        if ( $self->has_proxy_ip && $self->proxy_ip ) {
-            my $data  =  $ad_obj->ua->get($self->proxy_url)->result->json;
-            unless ( $data->{code}  ) {
-                my $serve = 'http://'.$data->{msg}->[0]->{ip}.':'.
-                $data->{msg}->[0]->{port};
-                $init_args{proxy_server}  = $serve;
-            }else{
-#        my $logger  = get_logger();
-                $self->log->error( 'proxy error' );
-                die "proxy error";
-            }
-
+        if ( $self->has_proxy_server ) {
+          $init_args{proxy_server}  = $self->proxy_server;
+          $self->log->debug( 'set header in forwarded' );
         }
         my $bbs_ad = Bbs::Advertising->new(%init_args);
         $bbs_ad->reply_bbs($mission->{$doc}->{tid}, $message);
