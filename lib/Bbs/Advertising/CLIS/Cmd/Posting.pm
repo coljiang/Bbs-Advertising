@@ -13,7 +13,6 @@ use IO::All;
 
 # VERSION
 # ABSTRACT: This is subroutine of CLI apps that posting bulletin
-with 'MooX::Log::Any';
 
 option 'mission' =>(
     is    => 'rw',
@@ -33,6 +32,23 @@ option 'log_conf'=> (
     doc   =>  'log config file'
 );
 
+option 'map'   => (
+    is    => 'rw',
+    isa   => Str,
+    required => 1,
+    doc   => 'map file path'
+
+);
+
+option 'target'=> (
+    is    =>  'rw',
+    isa   =>   Str,
+    format => 's',
+    requeire => 1,
+    doc   =>  'mission note file'
+);
+
+with 'MooX::Log::Any','Bbs::Advertising::Role::IO';
 
 sub BUILD {
     my $self   = shift;
@@ -44,38 +60,55 @@ sub BUILD {
 
 sub execute {
     my ($self, $args_ref, $chain_ref) = @_;
-    my ($mission, @list, @need_content );
+    my ( $need_content,$last );
     $self->options_usage unless (@$args_ref);
     $self->log->info("call CLI : Posting");
-    $self->log->debug( "read mission file", $self->mission );
-    $mission = io($self->mission)->slurp;
-    @list    = split /[\d0]#+/, $mission;
-    #delete space line
-    @list = grep { /body/  } @list;
-    for my $part ( @list ) {
-        my %save;
-        my @info = split /body:|type:|title:|attachments:/, $part;
-        shift @info;
-        ($save{body}, $save{type}, $save{title}, $save{attachments}) =
-        @info;
-        for (keys %save) {
-            chomp($save{$_}) if $save{$_}
-        }
-        if ( $save{type} =~ /Error/ ) {
-            $self->log->error(
-              sprintf "%s -- %s : error", $save{title}, $save{type}
-                             );
-            die sprintf "%s -- %s : error", $save{title}, $save{type};
-        }
-        push @need_content, \%save;
+    $need_content = $self->read_mail_mission;
+    my @common_header  = qw/ bbs_id mail /;
+    my @s_header       = ( @common_header, 'id', 'mail_pw', 'bbs_pw',
+                           'login', 'ban'
+                         );
+    my $ad_obj    =  Bbs::Advertising->new(
+      {log_conf => $self->log_conf}
+                                          );
+    my $source    =  $ad_obj->_read_csv($self->map,
+                                       \@s_header);
+    my @sort_all_m = sort {
+                    my($num_a ) = $source->{$a}->{mail} =~/(\d+)\@/;
+                    my($num_b ) = $source->{$b}->{mail} =~/(\d+)\@/;
+                    $num_a <=> $num_b;
+                          } keys %$source;
+    my $content = io $self->target;
+    while ( my $line  = $content->chomp->getline  ) { $last = $line   }
+    $last = (split /,/, $last)[1];
+        #get last user
+    my $user = $self->_get_user ( $last, \@sort_all_m);
+    $user    = $sort_all_m[$user];
+    say $user;die;
+    for my$info ( @$need_content ) {
+        next if $info->{type} =~ /Finish/;
+	    my $ad = Bbs::Advertising->new( {
+	            'log_conf'  =>  $self->log_conf,
+	            'mission'   =>  $self->mission,
+                'target'    =>  $self->target
+	                                    }
+	                                  );
+           $ad->postings;
     }
-
-    my $ad = Bbs::Advertising->new( {
-            'log_conf'  =>  $self->log_conf,
-            'mission'   =>  $self->mission,
-                                    }
-                                  );
-
 }
 
+sub _get_user {
+    my $self  = shift;
+    my $mail  = shift;
+    my $all_m = shift;
+    my $i = -1;
+    my %index = map { $i++; $_ , $i  } @$all_m;
+    if( $index{$mail} ) {
+        return ++$index{$mail}
+    }else{
+        $self->log->error( "can't not find post user" );
+        die "can't not find post user"
+    };
+
+}
 1;

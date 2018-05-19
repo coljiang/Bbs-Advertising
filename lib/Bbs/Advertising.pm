@@ -12,7 +12,7 @@ use Log::Any::Adapter;
 use Data::Dumper;
 use IO::All;
 use Mail::IMAPClient;
-use URI::Escape::XS;
+use URL::Encode qw/url_decode url_encode/;
 # VERSION: 0.001
 # ABSTRACT: Send Ad to bbs
 
@@ -110,6 +110,14 @@ has map => (
     default => sub { './source_map' }
 );
 
+=item target
+mission_list ralation file
+=cut
+has target => (
+    is  => 'rw',
+    isa => Str,
+    default => sub { './source_map' }
+);
 =item report_dir
 report file path
 =cut
@@ -155,6 +163,18 @@ has  proxy_server  => (
 =cut
 
 has  mission  => (
+    is   => 'ro',
+    isa  =>  Str,
+    predicate => 1,
+);
+
+=item bulletin
+
+ bbs posting content
+
+=cut
+
+has  bulletin  => (
     is   => 'ro',
     isa  =>  Str,
     predicate => 1,
@@ -358,6 +378,7 @@ sub reply_bbs {
     my $turl        = shift;
     my $message     = shift;
     my $_self_call  = shift;
+    my $ord_str;
     $self->_ua_add_proxy if ($self->proxy_server && !$_self_call);
     $self->_login unless $_self_call;
 #    my $logger      = get_logger();
@@ -371,12 +392,15 @@ sub reply_bbs {
     $self->log->info ( 'turl : '.$hash_url );
     my $form_hash   = $self->_get_form_hash( $hash_url );
     my $code_result = $self->_get_code;
+    # my $code_result;
     my $data        = $self->reply_form;
-    #from_to($message, "utf-8", "gbk");
-    $message =  encode("gbk",  $message);
-    $message =  encodeURIComponent($message);
-    $message =  decode('utf8',$message);
-
+    #   from_to($message, "utf-8", "gbk");
+    #$message =  decode('utf8', $message);
+    #$message =  encode("gbk",  $message);
+    # say $message;
+    #$ord_str .=  sprintf("\\%o", ord) foreach ( split //, $message);
+    #   $message =   url_encode($message);
+    #say $ord_str;die;
     $data->{seccodehash}  = $code_result->{secode_hash};
     $data->{seccodeverify}= $code_result->{code};
     $data->{formhash}     = $form_hash;
@@ -384,9 +408,11 @@ sub reply_bbs {
     #   $data->{subject}      = '++';
     $data->{posttime}     = time;
     my $login_return= $self->ua->post($tid_url =>
-                           { 'Accept-Language' => 'zh-CN,zh;q=0.9'
+                           {
+                           'Accept-Language' => 'zh-CN,zh;q=0.9',
+                           'Accept-Encoding' => 'gzip, deflate',
                            },
-                           form => $data)->result->body;
+                           form => $data => charset => 'gbk')->result->body;
     $login_return   =  decode('gbk',$login_return);
     my $err_info    =  decode('utf-8', '验证码填写错误');
     $self->log->debug( $login_return);
@@ -398,7 +424,7 @@ sub reply_bbs {
        $self->error_secode($error_info);
        $self->reply_bbs($turl, $message,1);
     }else{
-        $self->log->error($login_return);
+        $self->log->info("Reply is success : ",$hash_url);
     }
 }
 
@@ -466,10 +492,10 @@ sub create_user {
 
 sub postings {
     my $self  = shift;
-    my ( @need_post );
+    my ( @need_post, $note, $content, $last );
     $self->log->info("call postings");
-    $self->log->debug( "read mission file");
-    io->($self->mission)
+
+
 
 
 }

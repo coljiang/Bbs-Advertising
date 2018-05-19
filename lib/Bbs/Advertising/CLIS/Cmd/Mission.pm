@@ -215,6 +215,7 @@ sub execute {
                     push @attachments, $path->absolute->pathname;
                 }
             };
+            $content{msg}         = $msg;
             $content{attachments} = \@attachments
             if @attachments;
             push @need_mail, \%content;
