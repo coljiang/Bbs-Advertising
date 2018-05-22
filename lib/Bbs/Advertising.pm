@@ -156,15 +156,15 @@ has  proxy_server  => (
     predicate => 1,
 );
 
-=item mission
+=item bulletin
 
  mail prase result
 
 =cut
 
-has  mission  => (
+has  bulletin  => (
     is   => 'ro',
-    isa  =>  Str,
+    isa  =>  HashRef[Str],
     predicate => 1,
 );
 

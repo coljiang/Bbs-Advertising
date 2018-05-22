@@ -60,7 +60,7 @@ sub BUILD {
 
 sub execute {
     my ($self, $args_ref, $chain_ref) = @_;
-    my ( $need_content,$last );
+    my ( $need_content );
     $self->options_usage unless (@$args_ref);
     $self->log->info("call CLI : Posting");
     $need_content = $self->read_mail_mission;
@@ -68,28 +68,27 @@ sub execute {
     my @s_header       = ( @common_header, 'id', 'mail_pw', 'bbs_pw',
                            'login', 'ban'
                          );
+	my @m_header       = qw/ tid mail last/;
     my $ad_obj    =  Bbs::Advertising->new(
       {log_conf => $self->log_conf}
                                           );
     my $source    =  $ad_obj->_read_csv($self->map,
                                        \@s_header);
+	my $mission   =  $ad_obj->_read_csv($self->target,
+	                                    \@m_header,
+	                                    );
     my @sort_all_m = sort {
                     my($num_a ) = $source->{$a}->{mail} =~/(\d+)\@/;
                     my($num_b ) = $source->{$b}->{mail} =~/(\d+)\@/;
                     $num_a <=> $num_b;
                           } keys %$source;
-    my $content = io $self->target;
-    while ( my $line  = $content->chomp->getline  ) { $last = $line   }
-    $last = (split /,/, $last)[1];
         #get last user
-    my $user = $self->_get_user ( $last, \@sort_all_m);
-    $user    = $sort_all_m[$user];
-    say $user;die;
     for my$info ( @$need_content ) {
+        my $user = $self->_get_user (  \@sort_all_m);
         next if $info->{type} =~ /Finish/;
 	    my $ad = Bbs::Advertising->new( {
 	            'log_conf'  =>  $self->log_conf,
-	            'mission'   =>  $self->mission,
+	            'mission'   =>  $info,
                 'target'    =>  $self->target
 	                                    }
 	                                  );
@@ -99,12 +98,15 @@ sub execute {
 
 sub _get_user {
     my $self  = shift;
-    my $mail  = shift;
     my $all_m = shift;
+    my $last;
+    my $content = io $self->target;
+    while ( my $line  = $content->chomp->getline  ) { $last = $line   }
+    my $mail    = (split /,/, $last)[1];
     my $i = -1;
     my %index = map { $i++; $_ , $i  } @$all_m;
     if( $index{$mail} ) {
-        return ++$index{$mail}
+        return $all_m->[++$index{$mail}]
     }else{
         $self->log->error( "can't not find post user" );
         die "can't not find post user"
