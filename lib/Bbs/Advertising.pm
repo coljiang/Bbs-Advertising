@@ -168,17 +168,6 @@ has  bulletin  => (
     predicate => 1,
 );
 
-=item bulletin
-
- bbs posting content
-
-=cut
-
-has  bulletin  => (
-    is   => 'ro',
-    isa  =>  Str,
-    predicate => 1,
-);
 
 with 'MooX::Log::Any','Bbs::Advertising::Role::Check';
 
@@ -211,7 +200,7 @@ sub _build_url {
         submit_req=> 'http://www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
         subit_imag=> 'http://www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
         post_imag => 'http://cssanyu.org/bbs2/uc_server/index.php',
-        release_form => 'http://cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
+        post_form => 'http://cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
 
     }
 }
@@ -492,8 +481,16 @@ sub create_user {
 
 sub postings {
     my $self  = shift;
-    my ( @need_post, $note, $content, $last );
+    my ( @need_post, $note, $content, $last, $info );
     $self->log->info("call postings");
+    $info->{formhash} = $self->_get_form_hash(
+                           $self->url->{post_form}
+                                             );
+    $info->{posttime} = $self->_get_form_hash(
+                            $self->url->{post_form},
+      qr/<input type="hidden" name="posttime".*?value="(\d+)"/
+                                             );
+
 
 
 

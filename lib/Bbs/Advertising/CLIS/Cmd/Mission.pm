@@ -171,6 +171,7 @@ sub execute {
 	my @msgs = $imap->since($dt->epoch - 3600 *24 * $self->day);
     ##Prase mail
     for my $msg ( @msgs ){
+        $self->log->debug( sprintf "Prcessing : %s\n", $msg );
 	    my $str     = $imap->message_string($msg);
 	    my $con     = Email::MIME->new($str);
         my %header  = $con->header_str_pairs;
@@ -180,28 +181,12 @@ sub execute {
            ) {
             my(%content, @parts, @attachments);
             $self->log->info( sprintf "Prase Mail : %s from %s",
-            $header{Subject}, $header{From});
+                                $header{Subject}, $header{From}
+                            );
             @parts = $con->parts;
             my $mail_body = shift @parts;
-            my $sp_str    = encode('utf8', '分类：|主题：|内容：');
-
-            #my @t = split /分类：|主题：|内容：/, $mail_body;
-            my @mail_content = split /$sp_str/, $mail_body->body;
-             for (@mail_content) {
-                s/^\n+$|^\s+|\s+$//mg;
-                #say $1, '$1 Match' if $1;
-             };
-             ($content{type}, $content{title}, $content{body}) = @mail_content[1..3];
-             $content{body} = (split /--/, $content{body})[0];
-            my $type_int    = $self->type_id->{$content{type}};
-            if ( $type_int ) {
-                $content{type} = $type_int;
-            }else{
-                $self->log->warn(
-                "$header{Subject} has error type var : >$content{type}<"
-                                );
-                 $content{type} = $content{type}."Error";
-            }
+            %content = $self->_get_mail_content($mail_body,
+                                     $header{Subject});
             #           say Dumper $con->parts;
             for (my $i=0;$i<@parts; $i++){
                  if ( $parts[$i]->content_type =~ /jpeg/ ) {
@@ -223,25 +208,41 @@ sub execute {
 	}
     ##output
     $self->save_mail_content( \@need_mail );
-=p
-    for ( my$i=0; $i<@need_mail; $i++ ) {
-        my $mail_c = $need_mail[$i];
-        $output .= $i.'#' x 20 ."\n";
-        my @keys = keys %{$mail_c};
-        my @sort = qw/ body type title /;
-        @sort    =  @keys == 4 ? (@sort, 'attachments') :
-                    @sort;
-#        say Dumper $mail_c;die;
-        my @list = map { $_,  ref $mail_c->{$_} ?
-                              join ",", @{$mail_c->{$_}}
-                              :  $mail_c->{$_}
-                       } @sort;
+}
 
-        $output .= sprintf "%s:%s\n" x @sort, @list;
+sub _get_mail_content {
+    my $self   =  shift;
+    my $mail   =  shift;
+    my $subject=  shift;
+    my(%content);
+    if ( $mail->body  ) {
+        my $sp_str    = encode('utf8', '分类：|主题：|内容：');
+        my @mail_content = split /$sp_str/, $mail->body;
+         for (@mail_content) {
+            s/^\n+$|^\s+|\s+$//mg;
+         };
+         ($content{type}, $content{title}, $content{body}) = @mail_content[1..3];
+         unless ( $content{type} || $content{title} || $content{body} ) {
+            $self->log->error("Mail parse error : $subject");
+         }
+         $content{body} = (split /--/, $content{body})[0];
+        my $type_int    = $self->type_id->{$content{type}};
+        if ( $type_int ) {
+            $content{type} = $type_int;
+        }else{
+            $self->log->warn(
+            "$subject has error type var : >$content{type}<"
+                            );
+            $content{type} = $content{type}."Error";
+        }
+        return %content;
+    }else{
+        my @parts = $mail->parts;
+        $mail = shift( @parts );
+        if ( $mail ) {
+            $self->_get_mail_content($mail, $subject)
+        }
     }
-    $output > io($self->mission);
-    $self->log->info("Save Prase result to ", $self->mission);
-=cut
 }
 
 

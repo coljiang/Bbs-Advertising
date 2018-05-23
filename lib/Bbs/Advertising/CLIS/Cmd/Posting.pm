@@ -85,6 +85,7 @@ sub execute {
         #get last user
     for my$info ( @$need_content ) {
         my $user = $self->_get_user (  \@sort_all_m);
+        say Dumper $user;die;
         next if $info->{type} =~ /Finish/;
 	    my $ad = Bbs::Advertising->new( {
 	            'log_conf'  =>  $self->log_conf,
