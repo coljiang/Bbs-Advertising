@@ -481,8 +481,12 @@ sub create_user {
 
 sub postings {
     my $self  = shift;
+    my $_self_call  = shift;
     my ( @need_post, $note, $content, $last, $info );
     $self->log->info("call postings");
+    $self->_ua_add_proxy if ($self->proxy_server && !$_self_call);
+    $self->_login unless $_self_call;
+    my $code_result = $self->_get_code;
     $info->{formhash} = $self->_get_form_hash(
                            $self->url->{post_form}
                                              );
@@ -490,7 +494,44 @@ sub postings {
                             $self->url->{post_form},
       qr/<input type="hidden" name="posttime".*?value="(\d+)"/
                                              );
-
+    $info->{wysiwyg}  = 1;
+    $info->{replycredit_extcredits} = 0;
+    $info->{"replycredit_times"}    = "1";
+    $info->{"replycredit_membertimes"} = "1";
+    $info->{"replycredit_random"} = "100";
+    $info->{"allownoticeauthor"} = "1";
+    $info->{"usesig"} = "1";
+    $info->{seccodemodid} = "forum::post";
+    $info->{seccodehash}  = $code_result->{secode_hash};
+    $info->{seccodeverify}=  $code_result->{code};
+    $info->{subject}      = $self->mission->{title};
+    $info->{message}      = $self->mission->{message};
+    $info->{typeid}       = $self->mission->{type};
+    my $login_return= $self->ua->post($self->url->{post_form} =>
+                           {
+                           'Accept-Language' => 'zh-CN,zh;q=0.9',
+                           'Accept-Encoding' => 'gzip, deflate',
+                           },
+                           form => $info => charset => 'gbk')->result->body;
+    $login_return   =  decode('gbk',$login_return);
+    my $err_info    =  decode('utf-8', '验证码填写错误');
+    if ($login_return=~ /$err_info/) {
+       $self->log->error( 'secode error in reply' );
+       my $error_info= $self->api_info;
+       $error_info->{captchaId} =$code_result->{captcha_id};
+       $error_info->{code} =$code_result->{code};
+       $self->error_secode($error_info);
+       $self->postings(1);
+    }elsif( $login_return =~ /document has moved.*?tid(\d)"/) {
+        my $tid = $1;
+        $self->log->info("post is success : ",
+          sprintf $self->{url}->{reply}, $tid
+                        );
+        return $tid;
+    }else{
+        $self->log->error( 'post is error : '.$login_return );
+        die "post error";
+    }
 
 
 

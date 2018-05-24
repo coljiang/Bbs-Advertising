@@ -77,24 +77,49 @@ sub execute {
 	my $mission   =  $ad_obj->_read_csv($self->target,
 	                                    \@m_header,
 	                                    );
-    my @sort_all_m = sort {
-                    my($num_a ) = $source->{$a}->{mail} =~/(\d+)\@/;
-                    my($num_b ) = $source->{$b}->{mail} =~/(\d+)\@/;
+    my @sort_all_s = sort {
+                    my($num_a ) = $source->{$a}->{id} ;
+                    my($num_b ) = $source->{$b}->{id} ;
                     $num_a <=> $num_b;
                           } keys %$source;
+    my @sort_all_m = sort {
+                    my($num_a ) = $mission->{$a}->{mail} =~/(\d+)\@/;
+                    my($num_b ) = $mission->{$b}->{mail} =~/(\d+)\@/;
+                    $num_a <=> $num_b;
+                          } keys %$mission;
+
         #get last user
-    for my$info ( @$need_content ) {
-        my $user = $self->_get_user (  \@sort_all_m);
-        say Dumper $user;die;
+    for  (my$x=0;$x < @$need_content;$x++ ) {
+        my $info = $need_content->{$x};
+        my $user = $self->_get_user (  \@sort_all_s);
         next if $info->{type} =~ /Finish/;
 	    my $ad = Bbs::Advertising->new( {
 	            'log_conf'  =>  $self->log_conf,
 	            'mission'   =>  $info,
-                'target'    =>  $self->target
+                'target'    =>  $self->target,
+                'bbs_id'    =>  $source->{$user}->{bbs_id},
+                'bbs_pw'    =>  $source->{$user}->{huoming73_bbs_PW}
 	                                    }
 	                                  );
-           $ad->postings;
+        my $tid =   $ad->postings;
+        $info->{type} .='>Finish';
+        $self->_update_mail_content;
+        $ad_obj->_update_map(\@sort_all_m, \@m_header, $mission, $self->target);
+        $self->log->info('update ',$self->target);
+
     }
+}
+
+sub _update_mail_content {
+    my $self   =  shift;
+    my $content=  shift;
+    my $path   = $self->mission;
+    $self->log->info('bakup ', $path,' file');
+    my $cmd       = "cp ".$path.' '.$path."_bak";
+    $self->log->debug( 'sys cmd '.$cmd  );
+    system ( $cmd  );
+    $self->save_mail_content($content);
+
 }
 
 sub _get_user {
