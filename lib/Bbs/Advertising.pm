@@ -199,8 +199,9 @@ sub _build_url {
         creat_from=> 'http://www.cssanyu.org/bbs2/member.php?mod=register',
         submit_req=> 'http://www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
         subit_imag=> 'http://www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
-        post_imag => 'http://cssanyu.org/bbs2/uc_server/index.php',
-        post_form => 'http://cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
+        post_imag => 'http://www.cssanyu.org/bbs2/uc_server/index.php',
+        post_form => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
+        post_data => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41&extra=&topicsubmit=yes',
 
     }
 }
@@ -348,6 +349,7 @@ sub _get_code {
     };
     if ( $res_api->json('/code') ) {
         $self->log->error( encode( 'unicode', $res_api->json('/message' ) ));
+        #  $self->log->error( Dumper($self->api_info) );
         die " api error"
     }
     my $code =  $res_api->json('/data/recognition');
@@ -504,10 +506,10 @@ sub postings {
     $info->{seccodemodid} = "forum::post";
     $info->{seccodehash}  = $code_result->{secode_hash};
     $info->{seccodeverify}=  $code_result->{code};
-    $info->{subject}      = $self->mission->{title};
-    $info->{message}      = $self->mission->{message};
-    $info->{typeid}       = $self->mission->{type};
-    my $login_return= $self->ua->post($self->url->{post_form} =>
+    $info->{subject}      = decode('utf8',$self->bulletin->{title});
+    $info->{message}      = decode('utf8',$self->bulletin->{body});
+    $info->{typeid}       = $self->bulletin->{type};
+    my $login_return= $self->ua->post($self->url->{post_data} =>
                            {
                            'Accept-Language' => 'zh-CN,zh;q=0.9',
                            'Accept-Encoding' => 'gzip, deflate',
@@ -522,7 +524,7 @@ sub postings {
        $error_info->{code} =$code_result->{code};
        $self->error_secode($error_info);
        $self->postings(1);
-    }elsif( $login_return =~ /document has moved.*?tid(\d)"/) {
+    }elsif( $login_return =~ /document has moved <a href="forum.php?mod=viewthread&amp;tid=(\d)/) {
         my $tid = $1;
         $self->log->info("post is success : ",
           sprintf $self->{url}->{reply}, $tid

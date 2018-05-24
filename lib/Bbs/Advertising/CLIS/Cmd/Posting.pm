@@ -47,6 +47,20 @@ option 'target'=> (
     requeire => 1,
     doc   =>  'mission note file'
 );
+option 'proxy_server'=> (
+    is    =>  'rw',
+    isa   =>   Str,
+    format => 's',
+    requeire => 1,
+    doc   =>  'proxy server ip save file'
+);
+option 'api_info'=> (
+    is    =>  'rw',
+    isa   =>   HashRef[Str],
+    format => 's',
+    requeire => 1,
+    doc   =>  'api infomation'
+);
 
 with 'MooX::Log::Any','Bbs::Advertising::Role::IO';
 
@@ -82,28 +96,34 @@ sub execute {
                     my($num_b ) = $source->{$b}->{id} ;
                     $num_a <=> $num_b;
                           } keys %$source;
-    my @sort_all_m = sort {
-                    my($num_a ) = $mission->{$a}->{mail} =~/(\d+)\@/;
-                    my($num_b ) = $mission->{$b}->{mail} =~/(\d+)\@/;
-                    $num_a <=> $num_b;
-                          } keys %$mission;
 
         #get last user
     for  (my$x=0;$x < @$need_content;$x++ ) {
-        my $info = $need_content->{$x};
+        my $info = $need_content->[$x];
         my $user = $self->_get_user (  \@sort_all_s);
         next if $info->{type} =~ /Finish/;
 	    my $ad = Bbs::Advertising->new( {
 	            'log_conf'  =>  $self->log_conf,
-	            'mission'   =>  $info,
-                'target'    =>  $self->target,
+	            'bulletin'   =>  $info,
+                #               'target'    =>  $self->target,
                 'bbs_id'    =>  $source->{$user}->{bbs_id},
-                'bbs_pw'    =>  $source->{$user}->{huoming73_bbs_PW}
+                'bbs_pw'    =>  $source->{$user}->{bbs_pw},
+                'proxy_server'=>  $self->proxy_server,
+                'api_info'  =>  $self->api_info,
 	                                    }
 	                                  );
         my $tid =   $ad->postings;
         $info->{type} .='>Finish';
         $self->_update_mail_content;
+        $mission->{$source->{$user}->{mail}} = {
+            tid  => $tid,         mail=> $source->{$user}->{mail},
+            last => DateTime->now(time_zone => "Asia/Shanghai")
+                                               };
+        my @sort_all_m = sort {
+                        my($num_a ) = $mission->{$a}->{mail} =~/(\d+)\@/;
+                        my($num_b ) = $mission->{$b}->{mail} =~/(\d+)\@/;
+                        $num_a <=> $num_b;
+                              } keys %$mission;
         $ad_obj->_update_map(\@sort_all_m, \@m_header, $mission, $self->target);
         $self->log->info('update ',$self->target);
 
