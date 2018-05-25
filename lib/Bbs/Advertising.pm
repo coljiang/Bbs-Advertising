@@ -662,6 +662,7 @@ sub _get_login_url {
         Password  =>   $user_info->{mail_pw},
         Ssl       =>   1,
                                     );
+    $imap or die "new failed: $@\n";
     my @data      = $imap->select('INBOX')
       ->search('ALL');
     $self->log->info('waitting login mail 10 s');
