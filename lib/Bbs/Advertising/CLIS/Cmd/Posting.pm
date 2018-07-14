@@ -113,7 +113,7 @@ sub execute {
 	                                    }
 	                                  );
         my $tid =   $ad->postings;
-        $info->{type} .='>Finish';
+        $info->{type} .=">Finish--$tid";
         $self->_update_mail_content;
         $mission->{$source->{$user}->{mail}} = {
             tid  => $tid,         mail=> $source->{$user}->{mail},

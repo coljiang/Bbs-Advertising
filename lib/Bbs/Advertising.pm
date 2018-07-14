@@ -524,7 +524,7 @@ sub postings {
        $error_info->{code} =$code_result->{code};
        $self->error_secode($error_info);
        $self->postings(1);
-    }elsif( $login_return =~ /document has moved <a href="forum.php?mod=viewthread&amp;tid=(\d)/) {
+    }elsif( $login_return =~ /document has moved <a href="forum.php\?mod=viewthread&amp;tid=(\d)/) {
         my $tid = $1;
         $self->log->info("post is success : ",
           sprintf $self->{url}->{reply}, $tid
