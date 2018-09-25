@@ -187,21 +187,21 @@ before 'reply_bbs' => sub {
 sub _build_url {
     my $self = shift;
     {
-        form_hash => 'http://www.cssanyu.org/bbs2/member.php?mod=logging&action=login&infloat=yes&handlekey=login&inajax=1&ajaxtarget=fwin_content_login',
-        code_info => 'http://www.cssanyu.org/bbs2/misc.php?mod=seccode&action=update&idhash=cSAF0C4K3&0.824328346894786&modid=member::logging',
-        code_image=> 'http://www.cssanyu.org/bbs2/',
-        login     => 'http://www.cssanyu.org/bbs2/member.php?mod=logging&action=login&loginsubmit=yes&handlekey=login&loginhash=LJEW9&inajax=1',
+        form_hash => 'http://7www.cssanyu.org/bbs2/member.php?mod=logging&action=login&infloat=yes&handlekey=login&inajax=1&ajaxtarget=fwin_content_login',
+        code_info => 'http://7www.cssanyu.org/bbs2/misc.php?mod=seccode&action=update&idhash=cSAF0C4K3&0.824328346894786&modid=member::logging',
+        code_image=> 'http://7www.cssanyu.org/bbs2/',
+        login     => 'http://7www.cssanyu.org/bbs2/member.php?mod=logging&action=login&loginsubmit=yes&handlekey=login&loginhash=LJEW9&inajax=1',
         api       => 'https://v2-api.jsdama.com/upload',
         error_api => 'https://v2-api.jsdama.com/report-error',
-        reply     => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
-        reply_from=> 'http://www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1',
-        secqaa_url=> 'http://www.cssanyu.org/bbs2/misc.php?mod=secqaa&action=update&idhash=qSC1Rl2Q',
-        creat_from=> 'http://www.cssanyu.org/bbs2/member.php?mod=register',
-        submit_req=> 'http://www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
-        subit_imag=> 'http://www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
-        post_imag => 'http://www.cssanyu.org/bbs2/uc_server/index.php',
-        post_form => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
-        post_data => 'http://www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41&extra=&topicsubmit=yes',
+        reply     => 'http://7www.cssanyu.org/bbs2/forum.php?mod=post&action=reply&fid=41&tid=%sextra=&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
+        reply_from=> 'http://7www.cssanyu.org/bbs2/forum.php?mod=viewthread&tid=%s&page=1',
+        secqaa_url=> 'http://7www.cssanyu.org/bbs2/misc.php?mod=secqaa&action=update&idhash=qSC1Rl2Q',
+        creat_from=> 'http://7www.cssanyu.org/bbs2/member.php?mod=register',
+        submit_req=> 'http://7www.cssanyu.org/bbs2/member.php?mod=register&inajax=1',
+        subit_imag=> 'http://7www.cssanyu.org/bbs2/home.php?mod=spacecp&ac=avatar',
+        post_imag => 'http://7www.cssanyu.org/bbs2/uc_server/index.php',
+        post_form => 'http://7www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41',
+        post_data => 'http://7www.cssanyu.org/bbs2/forum.php?mod=post&action=newthread&fid=41&extra=&topicsubmit=yes',
 
     }
 }
